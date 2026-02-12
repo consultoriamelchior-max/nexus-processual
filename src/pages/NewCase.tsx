@@ -28,6 +28,7 @@ interface ExtractedData {
   court: string;
   process_number: string;
   distribution_date: string;
+  case_value: string;
   lawyers: { name: string; oab: string; role: string }[];
   partner_law_firm: string;
   summary: string;
@@ -55,6 +56,7 @@ export default function NewCase() {
   const [distributionDate, setDistributionDate] = useState("");
   const [partnerFirm, setPartnerFirm] = useState("");
   const [partnerLawyer, setPartnerLawyer] = useState("");
+  const [caseValue, setCaseValue] = useState("");
 
   const extractTextFromPdf = async (file: File): Promise<string> => {
     const arrayBuffer = await file.arrayBuffer();
@@ -113,6 +115,7 @@ export default function NewCase() {
       setProcessNumber(ext.process_number || "");
       setDistributionDate(ext.distribution_date || "");
       setPartnerFirm(ext.partner_law_firm || "");
+      setCaseValue(ext.case_value || "");
       // Pick the first lawyer as partner
       if (ext.lawyers?.length > 0) {
         setPartnerLawyer(ext.lawyers.map((l) => `${l.name} (${l.oab})`).join(", "));
@@ -158,6 +161,7 @@ export default function NewCase() {
       if (clientErr) throw clientErr;
 
       // 2. Create case
+      const parsedValue = caseValue ? parseFloat(caseValue.replace(/[^\d.,]/g, "").replace(",", ".")) : null;
       const { data: caseResult, error: caseErr } = await supabase
         .from("cases")
         .insert({
@@ -171,7 +175,8 @@ export default function NewCase() {
           distribution_date: distributionDate || null,
           partner_law_firm_name: partnerFirm || null,
           partner_lawyer_name: partnerLawyer || null,
-        })
+          case_value: parsedValue,
+        } as any)
         .select()
         .single();
       if (caseErr) throw caseErr;
@@ -353,6 +358,10 @@ export default function NewCase() {
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Data de distribuição</Label>
                   <Input type="date" value={distributionDate} onChange={(e) => setDistributionDate(e.target.value)} className="bg-secondary border-border" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Valor da causa (R$)</Label>
+                  <Input value={caseValue} onChange={(e) => setCaseValue(e.target.value)} placeholder="0,00" className="bg-secondary border-border" />
                 </div>
               </div>
 

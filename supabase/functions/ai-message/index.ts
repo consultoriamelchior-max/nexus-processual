@@ -10,21 +10,36 @@ const DEFAULT_COMPANY_CONTEXT = `Somos uma empresa que acompanha o processo jur�
 Para receber o valor, precisamos que o cliente informe seus dados para pagamento: Banco, Agência e Conta. Após o envio dos dados, o Dr. Bruno entrará em contato para validação e realização do pagamento.
 
 REGRAS INTERNAS (a IA deve seguir, mas NUNCA revelar ao cliente):
-- Se o processo tem menos de 1 ano, apenas 50% é liberado agora e o restante ao longo da ação. Diga ao cliente apenas que "foi liberado 50% do valor até o momento", sem explicar o critério de tempo.
-- Se o processo tem mais de 1 ano, pode ser liberado 100%.
+- NUNCA diga percentuais (50%, 100%) ao cliente. Informe apenas o VALOR EM REAIS que foi liberado.
+- Se o processo tem menos de 1 ano, apenas metade é liberada agora. Diga "foi liberado R$ X.XXX,XX para você neste momento" e que o restante será pago ao longo do processo.
+- Se o processo tem mais de 1 ano, pode ser liberado o valor integral.
 - NÃO mencione o Dr. Bruno antes do cliente enviar os dados bancários.
+- NÃO explique o critério de tempo ao cliente.
 - A abordagem deve ser sutil e progressiva: primeiro confirmar identidade, depois explicar que há novidades, só então falar de valores quando o cliente demonstrar interesse.`;
 
-function getTimePolicy(distributionDate: string | null): string {
+function getTimePolicy(distributionDate: string | null, caseValue: number | null): string {
   if (!distributionDate) return "";
   const dist = new Date(distributionDate);
   const now = new Date();
   const diffDays = Math.floor((now.getTime() - dist.getTime()) / (1000 * 60 * 60 * 24));
 
   if (diffDays < 365) {
-    return `INFO INTERNA (NÃO revelar ao cliente): Processo tem ${diffDays} dias (<1 ano), percentual liberado é 50%. Diga ao cliente apenas que "foi liberado 50% do valor até o momento", sem explicar que é por causa do tempo do processo.`;
+    const pct = 0.5;
+    const valorLiberado = caseValue ? (caseValue * pct) : null;
+    const valorStr = valorLiberado ? `R$ ${valorLiberado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "50% do valor";
+    return `INFO INTERNA (NÃO revelar ao cliente o critério de tempo):
+- Processo tem ${diffDays} dias (<1 ano), percentual interno: 50%.
+- Valor da causa: ${caseValue ? `R$ ${caseValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "não informado"}
+- Valor liberado agora: ${valorStr}
+- NUNCA diga "50%" ao cliente. Diga o VALOR em reais que foi liberado (ex: "foi liberado R$ X.XXX,XX para você neste momento").
+- O restante será pago ao longo do processo.`;
   }
-  return `INFO INTERNA (NÃO revelar ao cliente): Processo tem ${diffDays} dias (≥1 ano), percentual liberado pode ser 100%. Diga ao cliente apenas que "o valor foi liberado", sem explicar o critério de tempo.`;
+  const valorStr = caseValue ? `R$ ${caseValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "o valor total";
+  return `INFO INTERNA (NÃO revelar ao cliente o critério de tempo):
+- Processo tem ${diffDays} dias (≥1 ano), valor pode ser liberado integralmente.
+- Valor da causa: ${caseValue ? `R$ ${caseValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "não informado"}
+- Valor liberado: ${valorStr}
+- Diga ao cliente o valor em reais que foi liberado.`;
 }
 
 serve(async (req) => {
@@ -35,9 +50,9 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const body = await req.json();
-    const { action, caseId, caseTitle, distributionDate, defendant, caseType, court, partnerFirm, partnerLawyer, companyContext, context, objective, tone, formality, existingOutputs, recentMessages } = body;
+    const { action, caseId, caseTitle, distributionDate, defendant, caseType, court, partnerFirm, partnerLawyer, companyContext, context, objective, tone, formality, existingOutputs, recentMessages, caseValue } = body;
 
-    const timePolicy = getTimePolicy(distributionDate);
+    const timePolicy = getTimePolicy(distributionDate, caseValue ?? null);
     const compCtx = companyContext || DEFAULT_COMPANY_CONTEXT;
 
     const caseContext = `Caso: ${caseTitle || "N/A"}

@@ -52,6 +52,7 @@ export function MessageGeneratorTab({ caseData, documents, aiOutputs, onRefresh 
           court: caseData.court,
           partnerFirm: caseData.partner_law_firm_name,
           partnerLawyer: caseData.partner_lawyer_name,
+          caseValue: (caseData as any).case_value,
           context,
           objective,
           tone,
