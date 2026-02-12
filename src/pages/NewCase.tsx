@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -6,110 +6,185 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, ArrowRight, Upload, Loader2, Sparkles, User, FileText } from "lucide-react";
+import { ArrowLeft, Upload, Loader2, Sparkles, FileText, CheckCircle2, AlertTriangle, Phone } from "lucide-react";
 import { toast } from "sonner";
-import type { Client } from "@/lib/types";
+import * as pdfjsLib from "pdfjs-dist";
+
+// Configure PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.worker.min.mjs`;
+
+interface ExtractedData {
+  client_name: string;
+  client_cpf: string;
+  defendant: string;
+  case_type: string;
+  court: string;
+  process_number: string;
+  distribution_date: string;
+  lawyers: { name: string; oab: string; role: string }[];
+  partner_law_firm: string;
+  summary: string;
+  phone_found: string;
+}
 
 export default function NewCase() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [processingPdf, setProcessingPdf] = useState(false);
 
-  // Client
-  const [clients, setClients] = useState<Client[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState("");
-  const [newClient, setNewClient] = useState({ full_name: "", phone: "", email: "", cpf_or_identifier: "" });
-  const [clientMode, setClientMode] = useState<"select" | "new">("new");
-
-  // Case
-  const [caseData, setCaseData] = useState({
-    case_title: "",
-    defendant: "",
-    case_type: "",
-    court: "",
-    process_number: "",
-    distribution_date: "",
-    partner_law_firm_name: "",
-    partner_lawyer_name: "",
-  });
-
-  // PDF
+  const [phone, setPhone] = useState("");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extracted, setExtracted] = useState<ExtractedData | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (user) {
-      supabase.from("clients").select("*").order("full_name").then(({ data }) => {
-        setClients((data as Client[]) ?? []);
-      });
+  // Editable fields after extraction
+  const [clientName, setClientName] = useState("");
+  const [clientCpf, setClientCpf] = useState("");
+  const [defendant, setDefendant] = useState("");
+  const [caseType, setCaseType] = useState("");
+  const [caseTitle, setCaseTitle] = useState("");
+  const [court, setCourt] = useState("");
+  const [processNumber, setProcessNumber] = useState("");
+  const [distributionDate, setDistributionDate] = useState("");
+  const [partnerFirm, setPartnerFirm] = useState("");
+  const [partnerLawyer, setPartnerLawyer] = useState("");
+
+  const extractTextFromPdf = async (file: File): Promise<string> => {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const pages: string[] = [];
+
+    for (let i = 1; i <= Math.min(pdf.numPages, 20); i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const text = content.items.map((item: any) => item.str).join(" ");
+      pages.push(text);
     }
-  }, [user]);
 
-  const handleSubmit = async () => {
-    if (!user) return;
-    setLoading(true);
+    return pages.join("\n\n");
+  };
 
+  const handleProcessPdf = async () => {
+    if (!pdfFile) {
+      toast.error("Selecione um PDF primeiro.");
+      return;
+    }
+
+    setExtracting(true);
     try {
-      // 1. Create or use existing client
-      let clientId = selectedClientId;
-      if (clientMode === "new") {
-        if (!newClient.full_name.trim() || !newClient.phone.trim()) {
-          toast.error("Nome e telefone são obrigatórios.");
-          setLoading(false);
-          return;
-        }
-        const { data: cData, error: cErr } = await supabase
-          .from("clients")
-          .insert({ ...newClient, user_id: user.id })
-          .select()
-          .single();
-        if (cErr) throw cErr;
-        clientId = cData.id;
-      }
+      // 1. Extract text client-side
+      const pdfText = await extractTextFromPdf(pdfFile);
 
-      if (!clientId) {
-        toast.error("Selecione ou crie um cliente.");
-        setLoading(false);
+      if (!pdfText.trim()) {
+        toast.error("Não foi possível extrair texto do PDF. O arquivo pode ser uma imagem escaneada.");
+        setExtracting(false);
         return;
       }
 
-      if (!caseData.case_title.trim()) {
-        toast.error("Título do caso é obrigatório.");
-        setLoading(false);
-        return;
+      // 2. Send to AI for structured extraction
+      const { data, error } = await supabase.functions.invoke("ai-analyze", {
+        body: {
+          extractedText: pdfText,
+          phoneProvided: phone,
+        },
+      });
+
+      if (error) throw error;
+
+      const ext = data?.extracted as ExtractedData;
+      if (!ext) throw new Error("Resposta inesperada da IA.");
+
+      setExtracted(ext);
+
+      // Pre-fill fields
+      setClientName(ext.client_name || "");
+      setClientCpf(ext.client_cpf || "");
+      setDefendant(ext.defendant || "");
+      setCaseType(ext.case_type || "");
+      setCaseTitle(ext.case_type ? `${ext.case_type} — ${ext.client_name || ""}` : "");
+      setCourt(ext.court || "");
+      setProcessNumber(ext.process_number || "");
+      setDistributionDate(ext.distribution_date || "");
+      setPartnerFirm(ext.partner_law_firm || "");
+      // Pick the first lawyer as partner
+      if (ext.lawyers?.length > 0) {
+        setPartnerLawyer(ext.lawyers.map((l) => `${l.name} (${l.oab})`).join(", "));
       }
+      // If phone was found in PDF and none was provided
+      if (ext.phone_found && !phone) {
+        setPhone(ext.phone_found);
+      }
+
+      toast.success("PDF processado! Confira os dados extraídos.");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao processar PDF.");
+    }
+    setExtracting(false);
+  };
+
+  const handleSave = async () => {
+    if (!user) return;
+    if (!clientName.trim()) {
+      toast.error("Nome do cliente é obrigatório.");
+      return;
+    }
+    if (!phone.trim()) {
+      toast.error("Telefone é obrigatório.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // 1. Create client
+      const { data: clientData, error: clientErr } = await supabase
+        .from("clients")
+        .insert({
+          full_name: clientName,
+          cpf_or_identifier: clientCpf || null,
+          phone,
+          user_id: user.id,
+        })
+        .select()
+        .single();
+      if (clientErr) throw clientErr;
 
       // 2. Create case
       const { data: caseResult, error: caseErr } = await supabase
         .from("cases")
         .insert({
-          ...caseData,
-          client_id: clientId,
+          client_id: clientData.id,
           user_id: user.id,
-          distribution_date: caseData.distribution_date || null,
+          case_title: caseTitle || `Caso — ${clientName}`,
+          defendant: defendant || null,
+          case_type: caseType || null,
+          court: court || null,
+          process_number: processNumber || null,
+          distribution_date: distributionDate || null,
+          partner_law_firm_name: partnerFirm || null,
+          partner_lawyer_name: partnerLawyer || null,
         })
         .select()
         .single();
       if (caseErr) throw caseErr;
 
-      // 3. Upload PDF if present
+      // 3. Upload PDF and save document
       if (pdfFile) {
         const filePath = `${user.id}/${caseResult.id}/${pdfFile.name}`;
-        const { error: uploadErr } = await supabase.storage.from("documents").upload(filePath, pdfFile);
-        if (uploadErr) throw uploadErr;
+        await supabase.storage.from("documents").upload(filePath, pdfFile);
+
+        const pdfText = extracted ? await extractTextFromPdf(pdfFile).catch(() => "") : "";
 
         await supabase.from("documents").insert({
           case_id: caseResult.id,
           user_id: user.id,
           doc_type: "petição inicial",
           file_url: filePath,
+          extracted_text: pdfText || null,
+          extracted_json: extracted ? (extracted as any) : null,
         });
       }
 
-      // 4. Create initial conversation
+      // 4. Create conversation
       await supabase.from("conversations").insert({
         case_id: caseResult.id,
         user_id: user.id,
@@ -119,14 +194,9 @@ export default function NewCase() {
       toast.success("Caso criado com sucesso!");
       navigate(`/case/${caseResult.id}`);
     } catch (err: any) {
-      toast.error(err.message || "Erro ao criar caso.");
+      toast.error(err.message || "Erro ao salvar.");
     }
-    setLoading(false);
-  };
-
-  const handleProcessPdf = async () => {
-    if (!pdfFile) return;
-    toast.info("O PDF será processado após a criação do caso.");
+    setSaving(false);
   };
 
   return (
@@ -137,156 +207,173 @@ export default function NewCase() {
         </button>
 
         <h1 className="text-2xl font-bold mb-1">Novo Caso</h1>
-        <p className="text-sm text-muted-foreground mb-6">Preencha os dados do cliente e do caso.</p>
+        <p className="text-sm text-muted-foreground mb-6">
+          Envie a petição e a IA extrairá os dados automaticamente.
+        </p>
 
-        {/* Steps indicator */}
-        <div className="flex items-center gap-2 mb-8">
-          {[1, 2].map((s) => (
-            <div key={s} className="flex items-center gap-2">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                step >= s ? "bg-gradient-gold text-primary-foreground" : "bg-secondary text-muted-foreground"
-              }`}>
-                {s === 1 ? <User className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
-              </div>
-              <span className={`text-xs font-medium ${step >= s ? "text-foreground" : "text-muted-foreground"}`}>
-                {s === 1 ? "Cliente" : "Caso & Documento"}
-              </span>
-              {s < 2 && <div className={`w-12 h-0.5 ${step > s ? "bg-primary" : "bg-border"}`} />}
+        {/* Step 1: Phone + PDF */}
+        {!extracted && (
+          <div className="bg-card border border-border rounded-xl p-6 shadow-card animate-fade-in space-y-5">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Phone className="w-3 h-3" /> Telefone do cliente (se tiver)
+              </Label>
+              <Input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="(11) 99999-9999"
+                className="bg-secondary border-border"
+              />
+              <p className="text-[10px] text-muted-foreground">Se o telefone estiver na petição, será extraído automaticamente.</p>
             </div>
-          ))}
-        </div>
 
-        <div className="bg-card border border-border rounded-xl p-6 shadow-card animate-fade-in">
-          {step === 1 && (
-            <div className="space-y-5">
-              <div className="flex gap-2 mb-4">
-                <Button
-                  variant={clientMode === "new" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setClientMode("new")}
-                  className={clientMode === "new" ? "bg-gradient-gold text-primary-foreground" : ""}
-                >
-                  Novo Cliente
-                </Button>
-                <Button
-                  variant={clientMode === "select" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setClientMode("select")}
-                  className={clientMode === "select" ? "bg-gradient-gold text-primary-foreground" : ""}
-                  disabled={clients.length === 0}
-                >
-                  Selecionar Existente
-                </Button>
-              </div>
-
-              {clientMode === "new" ? (
-                <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Nome completo *</Label>
-                      <Input value={newClient.full_name} onChange={(e) => setNewClient({ ...newClient, full_name: e.target.value })} className="bg-secondary border-border" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Telefone *</Label>
-                      <Input value={newClient.phone} onChange={(e) => setNewClient({ ...newClient, phone: e.target.value })} className="bg-secondary border-border" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">CPF / Identificador</Label>
-                      <Input value={newClient.cpf_or_identifier} onChange={(e) => setNewClient({ ...newClient, cpf_or_identifier: e.target.value })} className="bg-secondary border-border" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">E-mail</Label>
-                      <Input value={newClient.email} onChange={(e) => setNewClient({ ...newClient, email: e.target.value })} className="bg-secondary border-border" />
-                    </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <FileText className="w-3 h-3" /> Petição Inicial (PDF) *
+              </Label>
+              <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary/50 transition-colors bg-secondary/50">
+                {pdfFile ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <CheckCircle2 className="w-6 h-6 text-primary" />
+                    <span className="text-sm text-foreground font-medium">{pdfFile.name}</span>
+                    <span className="text-[10px] text-muted-foreground">{(pdfFile.size / 1024 / 1024).toFixed(2)} MB</span>
                   </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <Upload className="w-6 h-6 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Clique para selecionar o PDF da petição</span>
+                  </div>
+                )}
+                <input type="file" accept=".pdf" className="hidden" onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)} />
+              </label>
+            </div>
+
+            <Button
+              onClick={handleProcessPdf}
+              disabled={!pdfFile || extracting}
+              className="w-full bg-gradient-gold text-primary-foreground hover:opacity-90 font-semibold"
+            >
+              {extracting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Processando com IA...
                 </>
               ) : (
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Selecionar cliente</Label>
-                  <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                    <SelectTrigger className="bg-secondary border-border">
-                      <SelectValue placeholder="Escolha um cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>{c.full_name} — {c.phone}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Processar PDF com IA
+                </>
               )}
+            </Button>
+          </div>
+        )}
 
-              <div className="flex justify-end pt-4">
-                <Button onClick={() => setStep(2)} className="bg-gradient-gold text-primary-foreground hover:opacity-90">
-                  Próximo <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
+        {/* Step 2: Review extracted data */}
+        {extracted && (
+          <div className="space-y-4 animate-slide-up">
+            {/* Summary card */}
+            {extracted.summary && (
+              <div className="bg-card border border-primary/30 rounded-xl p-4 shadow-glow">
+                <div className="flex items-center gap-2 text-xs text-primary font-medium mb-2">
+                  <Sparkles className="w-3.5 h-3.5" /> Resumo da IA
+                </div>
+                <p className="text-sm text-muted-foreground">{extracted.summary}</p>
               </div>
-            </div>
-          )}
+            )}
 
-          {step === 2 && (
-            <div className="space-y-5">
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Título do caso *</Label>
-                <Input value={caseData.case_title} onChange={(e) => setCaseData({ ...caseData, case_title: e.target.value })} className="bg-secondary border-border" />
+            {/* Lawyers found info */}
+            {extracted.lawyers && extracted.lawyers.length > 0 && (
+              <div className="bg-card border border-border rounded-xl p-4">
+                <p className="text-xs text-muted-foreground mb-2 font-medium">Advogados identificados na petição:</p>
+                <div className="space-y-1">
+                  {extracted.lawyers.map((l, i) => (
+                    <p key={i} className="text-xs">
+                      <span className="text-foreground font-medium">{l.name}</span>
+                      <span className="text-muted-foreground"> — OAB: {l.oab} — {l.role}</span>
+                    </p>
+                  ))}
+                </div>
               </div>
+            )}
 
+            {/* Editable fields */}
+            <div className="bg-card border border-border rounded-xl p-6 shadow-card space-y-5">
+              <h3 className="text-sm font-semibold">Dados do Cliente</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Nome do cliente *</Label>
+                  <Input value={clientName} onChange={(e) => setClientName(e.target.value)} className="bg-secondary border-border" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Telefone *</Label>
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} className="bg-secondary border-border" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">CPF</Label>
+                  <Input value={clientCpf} onChange={(e) => setClientCpf(e.target.value)} className="bg-secondary border-border" />
+                </div>
+              </div>
+
+              <hr className="border-border" />
+
+              <h3 className="text-sm font-semibold">Dados do Processo</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label className="text-xs text-muted-foreground">Título do caso</Label>
+                  <Input value={caseTitle} onChange={(e) => setCaseTitle(e.target.value)} className="bg-secondary border-border" />
+                </div>
+                <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Réu</Label>
-                  <Input value={caseData.defendant} onChange={(e) => setCaseData({ ...caseData, defendant: e.target.value })} className="bg-secondary border-border" />
+                  <Input value={defendant} onChange={(e) => setDefendant(e.target.value)} className="bg-secondary border-border" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Tipo de ação</Label>
-                  <Input value={caseData.case_type} onChange={(e) => setCaseData({ ...caseData, case_type: e.target.value })} className="bg-secondary border-border" />
+                  <Input value={caseType} onChange={(e) => setCaseType(e.target.value)} className="bg-secondary border-border" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Tribunal / Vara</Label>
-                  <Input value={caseData.court} onChange={(e) => setCaseData({ ...caseData, court: e.target.value })} className="bg-secondary border-border" />
+                  <Input value={court} onChange={(e) => setCourt(e.target.value)} className="bg-secondary border-border" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Nº do processo</Label>
-                  <Input value={caseData.process_number} onChange={(e) => setCaseData({ ...caseData, process_number: e.target.value })} className="bg-secondary border-border" />
+                  <Input value={processNumber} onChange={(e) => setProcessNumber(e.target.value)} className="bg-secondary border-border" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Data de distribuição</Label>
-                  <Input type="date" value={caseData.distribution_date} onChange={(e) => setCaseData({ ...caseData, distribution_date: e.target.value })} className="bg-secondary border-border" />
+                  <Input type="date" value={distributionDate} onChange={(e) => setDistributionDate(e.target.value)} className="bg-secondary border-border" />
                 </div>
               </div>
 
+              <hr className="border-border" />
+
+              <h3 className="text-sm font-semibold">Escritório Parceiro</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Escritório parceiro</Label>
-                  <Input value={caseData.partner_law_firm_name} onChange={(e) => setCaseData({ ...caseData, partner_law_firm_name: e.target.value })} className="bg-secondary border-border" />
+                  <Label className="text-xs text-muted-foreground">Escritório</Label>
+                  <Input value={partnerFirm} onChange={(e) => setPartnerFirm(e.target.value)} className="bg-secondary border-border" />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Advogado parceiro</Label>
-                  <Input value={caseData.partner_lawyer_name} onChange={(e) => setCaseData({ ...caseData, partner_lawyer_name: e.target.value })} className="bg-secondary border-border" />
+                  <Label className="text-xs text-muted-foreground">Advogado(s)</Label>
+                  <Input value={partnerLawyer} onChange={(e) => setPartnerLawyer(e.target.value)} className="bg-secondary border-border" />
                 </div>
-              </div>
-
-              {/* PDF Upload */}
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Upload da Petição (PDF)</Label>
-                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary/50 transition-colors bg-secondary/50">
-                  <Upload className="w-6 h-6 text-muted-foreground mb-2" />
-                  <span className="text-xs text-muted-foreground">{pdfFile ? pdfFile.name : "Clique para selecionar PDF"}</span>
-                  <input type="file" accept=".pdf" className="hidden" onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)} />
-                </label>
               </div>
 
               <div className="flex items-center justify-between pt-4 gap-4">
-                <Button variant="outline" onClick={() => setStep(1)}>
+                <Button variant="outline" onClick={() => { setExtracted(null); setPdfFile(null); }}>
                   <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
                 </Button>
-                <Button onClick={handleSubmit} disabled={loading} className="bg-gradient-gold text-primary-foreground hover:opacity-90">
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                <Button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="bg-gradient-gold text-primary-foreground hover:opacity-90 font-semibold"
+                >
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
                   Criar Caso
                 </Button>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </Layout>
   );

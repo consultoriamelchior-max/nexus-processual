@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,45 +12,45 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const authHeader = req.headers.get("Authorization");
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { extractedText, phoneProvided, caseId, documentId } = await req.json();
 
-    const { caseId, documentId, extractedText, fileUrl } = await req.json();
-
-    let text = extractedText || "";
-
-    // If no extracted text but we have fileUrl, we can't extract PDF text server-side easily
-    // For now we'll work with whatever text is provided
-    if (!text && fileUrl) {
-      // Try to get the document's extracted_text from DB
-      const { data: doc } = await supabase.from("documents").select("extracted_text").eq("id", documentId).single();
-      text = doc?.extracted_text || "";
-    }
-
-    if (!text) {
-      // Save a note that no text was available
-      return new Response(JSON.stringify({ error: "Nenhum texto disponível para análise. Cole o texto do PDF manualmente ou use um leitor de PDF externo." }), {
+    if (!extractedText?.trim()) {
+      return new Response(JSON.stringify({ error: "Nenhum texto disponível para análise." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const systemPrompt = `Você é um assistente jurídico especializado em análise de petições e documentos processuais brasileiros.
-Analise o texto fornecido e extraia as seguintes informações em formato JSON:
+    const systemPrompt = `Você é um assistente jurídico especializado em análise de petições brasileiras.
+
+TAREFA: Extraia dados estruturados da petição. 
+
+ATENÇÃO CRÍTICA — NÃO confunda os dados:
+- O AUTOR/REQUERENTE é o CLIENTE (a pessoa que entrou com a ação). Extraia nome e CPF do autor.
+- O RÉU/REQUERIDO é a parte CONTRÁRIA.
+- Os ADVOGADOS listados representam uma das partes. Identifique para qual parte cada advogado atua (autor ou réu).
+- O advogado do AUTOR é o advogado parceiro do escritório. 
+- Se houver telefone ou e-mail do autor/cliente no texto, extraia.
+
+Responda APENAS com JSON válido (sem markdown, sem backticks):
 {
-  "partes": {"autor": "...", "reu": "..."},
-  "tipo_acao": "...",
-  "tribunal": "...",
-  "advogados": ["..."],
-  "valores_citados": ["..."],
-  "datas_encontradas": ["..."],
-  "resumo": "Resumo em linguagem simples para leigos, máximo 3 parágrafos",
-  "perguntas_provaveis_cliente": ["Lista de 3-5 perguntas que o cliente provavelmente fará"],
-  "alertas_golpe": ["Lista de elementos que podem parecer suspeitos para o cliente ao ser contactado sobre este processo"]
-}
-Responda APENAS com o JSON válido, sem markdown.`;
+  "client_name": "nome completo do autor/requerente",
+  "client_cpf": "CPF do autor se encontrado",
+  "defendant": "nome do réu/requerido",
+  "case_type": "tipo de ação (ex: Ação de Indenização, Ação Trabalhista)",
+  "court": "tribunal e vara",
+  "process_number": "número do processo se encontrado",
+  "distribution_date": "data de distribuição no formato YYYY-MM-DD se encontrada, senão vazio",
+  "lawyers": [
+    {"name": "nome do advogado", "oab": "número OAB", "role": "advogado do autor | advogado do réu"}
+  ],
+  "partner_law_firm": "nome do escritório do advogado do autor se mencionado",
+  "phone_found": "telefone encontrado no texto do autor/cliente, se houver",
+  "summary": "resumo em 2-3 frases em linguagem simples para leigos",
+  "valores_citados": ["valores monetários mencionados"],
+  "alertas_golpe": ["elementos que podem parecer suspeitos ao cliente ser contactado"],
+  "perguntas_provaveis": ["3-5 perguntas prováveis do cliente"]
+}`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -63,7 +62,7 @@ Responda APENAS com o JSON válido, sem markdown.`;
         model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Analise este documento processual:\n\n${text.slice(0, 15000)}` },
+          { role: "user", content: `Telefone fornecido pelo operador: ${phoneProvided || "não informado"}\n\nTexto da petição:\n\n${extractedText.slice(0, 20000)}` },
         ],
       }),
     });
@@ -81,53 +80,28 @@ Responda APENAS com o JSON válido, sem markdown.`;
           status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      throw new Error("AI gateway error");
+      throw new Error("Erro no gateway de IA");
     }
 
     const aiResult = await response.json();
     const content = aiResult.choices?.[0]?.message?.content || "";
 
-    // Parse the JSON from AI response
-    let extractedJson: any = {};
+    let extracted: any = {};
     try {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        extractedJson = JSON.parse(jsonMatch[0]);
+        extracted = JSON.parse(jsonMatch[0]);
       }
     } catch {
-      extractedJson = { resumo: content };
+      extracted = { summary: content, client_name: "", defendant: "" };
     }
 
-    // Update document with extracted data
-    if (documentId) {
-      await supabase.from("documents").update({
-        extracted_text: text,
-        extracted_json: extractedJson,
-      }).eq("id", documentId);
-    }
-
-    // Save AI summary output
-    const userFromAuth = authHeader ? await supabase.auth.getUser(authHeader.replace("Bearer ", "")) : null;
-    const userId = userFromAuth?.data?.user?.id;
-
-    if (userId && caseId) {
-      await supabase.from("ai_outputs").insert({
-        case_id: caseId,
-        user_id: userId,
-        output_type: "case_summary",
-        content: extractedJson.resumo || content,
-        confidence_score: 7,
-        scam_risk: extractedJson.alertas_golpe?.length > 2 ? "alto" : extractedJson.alertas_golpe?.length > 0 ? "médio" : "baixo",
-        rationale: (extractedJson.alertas_golpe || []).join("; "),
-      });
-    }
-
-    return new Response(JSON.stringify({ success: true, extracted: extractedJson }), {
+    return new Response(JSON.stringify({ success: true, extracted }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("ai-analyze error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro desconhecido" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
