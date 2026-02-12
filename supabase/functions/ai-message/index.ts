@@ -81,6 +81,14 @@ IMPORTANTE SOBRE ABORDAGEM:
 
 ${caseContext}
 
+APRENDIZADO COM HISTÓRICO DE CONVERSAS:
+- Analise TODA a conversa anterior com atenção. Observe como o OPERADOR se comunica: tom, estilo, vocabulário, nível de formalidade, estratégias que usou.
+- Suas sugestões devem IMITAR o estilo do operador, não inventar um estilo diferente. Se o operador é direto, seja direto. Se usa emojis, use emojis. Se é formal, seja formal.
+- Observe quais abordagens do operador FUNCIONARAM (o cliente respondeu positivamente) e quais NÃO funcionaram (cliente ficou em silêncio ou resistente). Priorize o que funcionou.
+- NUNCA repita uma mensagem já enviada. Cada sugestão deve ser uma continuação natural da conversa, levando em conta TUDO que já foi dito.
+- Se o cliente já fez uma pergunta, responda a ela. Se o cliente já deu informações, não peça de novo.
+- Considere o momento atual do funil de vendas baseado no que já aconteceu na conversa.
+
 REGRAS:
 - Nunca se apresente como advogado
 - Nunca prometa resultados judiciais
@@ -93,6 +101,7 @@ ${timePolicy}
 
 Analise a conversa e classifique o estado emocional do cliente (desconfiado/curioso/resistente/ansioso/interessado).
 Sugira 2 respostas: uma curta e uma padrão, adequadas ao MOMENTO da conversa (se é início, meio ou fim do funil).
+As respostas devem ser no MESMO ESTILO e TOM que o operador usou nas mensagens anteriores.
 
 Responda em JSON:
 {"state": "...", "short": "resposta curta", "standard": "resposta padrão completa"}`;

@@ -100,7 +100,7 @@ export function ConversationsTab({ caseId, caseData, conversations, messages, on
           partnerLawyer: caseData.partner_lawyer_name,
           companyContext: caseData.company_context,
           caseValue: (caseData as any).case_value,
-          recentMessages: messages.slice(-10).map((m) => ({ sender: m.sender, text: m.message_text })),
+          recentMessages: messages.map((m) => ({ sender: m.sender, text: m.message_text })),
         },
       });
       if (error) throw error;
