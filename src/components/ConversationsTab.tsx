@@ -28,11 +28,37 @@ export function ConversationsTab({ caseId, caseData, conversations, messages, on
   const toTitleCase = (str: string) =>
     str.toLowerCase().replace(/(?:^|\s|[-/])\S/g, (c) => c.toUpperCase());
 
+  // Simplify defendant name: keep only the trading name before comma or legal suffix
+  const simplifyDefendant = (name: string) => {
+    // Remove common legal suffixes and everything after them
+    let simplified = name.replace(/[,\s]+(financiamento|crédito|credito|investimento|seguros|previdência|previdencia|participações|participacoes|administradora|corretora|distribuidora)\b.*/i, "");
+    // Remove S.A., S/A, LTDA, ME, EPP, EIRELI etc.
+    simplified = simplified.replace(/\s*(s\.?\/?a\.?|ltda\.?|me|epp|eireli)\.?\s*$/i, "").trim();
+    return simplified || name;
+  };
+
+  // Extract just the city + state from court string
+  const simplifyCourtToComarca = (court: string) => {
+    // Try to extract city name from patterns like "Vara Cível da Comarca de FARROUPILHA – RS"
+    const comarcaMatch = court.match(/comarca\s+de\s+(.+)/i);
+    if (comarcaMatch) {
+      return comarcaMatch[1].trim();
+    }
+    // Try "Foro de CIDADE" or "Foro Central"
+    const foroMatch = court.match(/foro\s+(?:de\s+|central\s+)?(.+)/i);
+    if (foroMatch) {
+      return foroMatch[1].trim();
+    }
+    return court;
+  };
+
   const clientName = (caseData as any).clients?.full_name || "Cliente";
   const firstName = toTitleCase(clientName.split(" ")[0]);
-  const defendantName = caseData.defendant ? toTitleCase(caseData.defendant) : "a parte ré";
-  const courtName = caseData.court ? caseData.court.toLowerCase().replace(/\b(rs|sp|rj|mg|pr|sc|ba|go|df|es|pe|ce|ma|pa|mt|ms|am|pi|rn|pb|se|al|to|ro|ac|ap|rr)\b/gi, (s) => s.toUpperCase()) : "comarca não informada";
-  const initialMessage = `Olá, ${firstName}! Tenho novidades sobre sua ação de revisão contra o ${defendantName} (comarca de ${courtName}). Poderia confirmar se recebeu esta mensagem?`;
+  const defendantName = caseData.defendant ? toTitleCase(simplifyDefendant(caseData.defendant)) : "a parte ré";
+  const courtDisplay = caseData.court
+    ? toTitleCase(simplifyCourtToComarca(caseData.court)).replace(/\b(rs|sp|rj|mg|pr|sc|ba|go|df|es|pe|ce|ma|pa|mt|ms|am|pi|rn|pb|se|al|to|ro|ac|ap|rr)\b/gi, (s) => s.toUpperCase())
+    : "comarca não informada";
+  const initialMessage = `Olá, ${firstName}! Tenho novidades sobre sua ação de revisão contra o ${defendantName} (Comarca de ${courtDisplay}). Poderia confirmar se recebeu esta mensagem?`;
 
   const addMessage = async (sender: string, text: string) => {
     if (!user || !conversationId) return;
