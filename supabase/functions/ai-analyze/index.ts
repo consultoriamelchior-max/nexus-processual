@@ -47,6 +47,7 @@ Responda APENAS com JSON válido (sem markdown, sem backticks):
   "court": "tribunal e vara",
   "process_number": "número do processo se encontrado",
   "distribution_date": "data de distribuição no formato YYYY-MM-DD se encontrada, senão vazio",
+  "case_value": "valor da causa em número decimal (ex: 50000.00). Procure 'Valor da Causa', 'Dá-se à causa o valor de', 'atribui à causa o valor de'. Geralmente aparece nas últimas páginas antes da assinatura. Se não encontrar, deixe vazio.",
   "lawyers": [
     {"name": "nome do advogado", "oab": "número OAB com estado (ex: OAB/RS 12345)", "role": "advogado do autor | advogado do réu"}
   ],

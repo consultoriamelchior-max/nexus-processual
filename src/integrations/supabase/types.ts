@@ -62,6 +62,7 @@ export type Database = {
         Row: {
           case_title: string
           case_type: string | null
+          case_value: number | null
           client_id: string
           company_context: string | null
           court: string | null
@@ -78,6 +79,7 @@ export type Database = {
         Insert: {
           case_title: string
           case_type?: string | null
+          case_value?: number | null
           client_id: string
           company_context?: string | null
           court?: string | null
@@ -94,6 +96,7 @@ export type Database = {
         Update: {
           case_title?: string
           case_type?: string | null
+          case_value?: number | null
           client_id?: string
           company_context?: string | null
           court?: string | null
