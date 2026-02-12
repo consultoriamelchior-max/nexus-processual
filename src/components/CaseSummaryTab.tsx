@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Sparkles, Loader2, AlertTriangle, Building2, User, Gavel, Save, BookOpen, DollarSign, CalendarIcon } from "lucide-react";
+import { Sparkles, Loader2, AlertTriangle, Building2, User, Gavel, Save, BookOpen, DollarSign, CalendarIcon, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import type { Case, Document, AiOutput } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
@@ -50,8 +50,8 @@ export function CaseSummaryTab({ caseData, documents, aiOutputs, onRefresh }: Pr
   const [context, setContext] = useState(caseData.company_context || DEFAULT_CONTEXT);
   const [savingCtx, setSavingCtx] = useState(false);
   const [caseValueInput, setCaseValueInput] = useState(
-    (caseData as any).case_value
-      ? Number((caseData as any).case_value).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    caseData.case_value
+      ? Number(caseData.case_value).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : ""
   );
   const [savingValue, setSavingValue] = useState(false);
@@ -59,6 +59,8 @@ export function CaseSummaryTab({ caseData, documents, aiOutputs, onRefresh }: Pr
     caseData.distribution_date ? new Date(caseData.distribution_date + "T12:00:00") : undefined
   );
   const [savingDate, setSavingDate] = useState(false);
+  const [caseSummary, setCaseSummary] = useState(caseData.case_summary || "");
+  const [savingSummary, setSavingSummary] = useState(false);
 
   const summaryOutput = aiOutputs.find((o) => o.output_type === "case_summary");
   const docWithJson = documents.find((d) => d.extracted_json);
@@ -77,7 +79,7 @@ export function CaseSummaryTab({ caseData, documents, aiOutputs, onRefresh }: Pr
   const handleSaveCaseValue = async () => {
     setSavingValue(true);
     const parsed = currencyToNumber(caseValueInput);
-    const { error } = await supabase.from("cases").update({ case_value: parsed } as any).eq("id", caseData.id);
+    const { error } = await supabase.from("cases").update({ case_value: parsed }).eq("id", caseData.id);
     if (error) toast.error("Erro ao salvar valor.");
     else {
       toast.success("Valor da causa salvo!");
@@ -116,6 +118,40 @@ export function CaseSummaryTab({ caseData, documents, aiOutputs, onRefresh }: Pr
 
   return (
     <div className="space-y-4 animate-fade-in">
+      {/* Case Summary */}
+      <div className="bg-card border border-border rounded-xl p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <ClipboardList className="w-4 h-4 text-primary" /> Resumo do Caso
+          </h3>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => {
+              setSavingSummary(true);
+              const { error } = await supabase.from("cases").update({ case_summary: caseSummary } as any).eq("id", caseData.id);
+              if (error) toast.error("Erro ao salvar resumo.");
+              else { toast.success("Resumo salvo!"); onRefresh(); }
+              setSavingSummary(false);
+            }}
+            disabled={savingSummary || caseSummary === (caseData.case_summary || "")}
+            className="text-xs"
+          >
+            {savingSummary ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Save className="w-3 h-3 mr-1" />}
+            Salvar
+          </Button>
+        </div>
+        <p className="text-[10px] text-muted-foreground mb-2">
+          Descreva o caso de forma resumida. Este texto será incluído na exportação.
+        </p>
+        <Textarea
+          value={caseSummary}
+          onChange={(e) => setCaseSummary(e.target.value)}
+          placeholder="Ex: A autora busca a revisão judicial de seu contrato de financiamento..."
+          className="bg-secondary border-border min-h-[100px] resize-y text-sm"
+        />
+      </div>
+
       {/* Company Context */}
       <div className="bg-card border border-border rounded-xl p-5">
         <div className="flex items-center justify-between mb-3">
