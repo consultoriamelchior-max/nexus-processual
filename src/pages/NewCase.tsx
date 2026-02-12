@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import * as pdfjsLib from "pdfjs-dist";
 
 // Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.worker.min.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs`;
 
 function formatPhone(value: string): string {
   const digits = value.replace(/\D/g, "");
