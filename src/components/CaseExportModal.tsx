@@ -15,9 +15,16 @@ function toTitleCase(str: string) {
 
 function buildExportText(caseData: Case): string {
   const client = (caseData as any).clients;
-  const caseValue = (caseData as any).case_value ? Number((caseData as any).case_value) : null;
+  const caseValue = caseData.case_value ? Number(caseData.case_value) : null;
   const paymentValue = caseValue ? caseValue / 2 : null;
   const lines: string[] = [];
+
+  if (caseData.case_summary) {
+    lines.push("📋 RESUMO DO CASO");
+    lines.push("───────────────────────────────────────");
+    lines.push(caseData.case_summary);
+    lines.push("");
+  }
 
   if (caseData.distribution_date) {
     lines.push(`Data de Autuação: ${new Date(caseData.distribution_date + "T12:00:00").toLocaleDateString("pt-BR")}`);

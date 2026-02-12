@@ -22,6 +22,8 @@ export interface Case {
   partner_law_firm_name: string | null;
   partner_lawyer_name: string | null;
   company_context: string | null;
+  case_summary: string | null;
+  case_value: number | null;
   status: string;
   created_at: string;
   clients?: Client;

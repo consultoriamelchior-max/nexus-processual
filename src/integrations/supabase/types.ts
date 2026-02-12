@@ -60,6 +60,7 @@ export type Database = {
       }
       cases: {
         Row: {
+          case_summary: string | null
           case_title: string
           case_type: string | null
           case_value: number | null
@@ -77,6 +78,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          case_summary?: string | null
           case_title: string
           case_type?: string | null
           case_value?: number | null
@@ -94,6 +96,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          case_summary?: string | null
           case_title?: string
           case_type?: string | null
           case_value?: number | null
