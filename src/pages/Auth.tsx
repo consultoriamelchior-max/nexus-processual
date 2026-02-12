@@ -1,42 +1,51 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Scale, Loader2 } from "lucide-react";
+import { Scale, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+
+const ACCESS_CODE = "171033";
+const DEFAULT_EMAIL = "operador@central-processual.app";
+const DEFAULT_PASS = "Cp#2026!SecureAccess";
 
 export default function Auth() {
-  const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  const handleComplete = async (value: string) => {
+    if (value !== ACCESS_CODE) {
+      toast.error("Código inválido.");
+      setCode("");
+      return;
+    }
 
-    if (isLogin) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) toast.error(error.message);
-    } else {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: window.location.origin },
+    setLoading(true);
+    // Try sign in first, if fails, sign up
+    const { error: signInErr } = await supabase.auth.signInWithPassword({
+      email: DEFAULT_EMAIL,
+      password: DEFAULT_PASS,
+    });
+
+    if (signInErr) {
+      const { error: signUpErr } = await supabase.auth.signUp({
+        email: DEFAULT_EMAIL,
+        password: DEFAULT_PASS,
       });
-      if (error) {
-        toast.error(error.message);
-      } else {
-        toast.success("Verifique seu e-mail para confirmar o cadastro.");
+      if (signUpErr) {
+        toast.error(signUpErr.message);
+        setLoading(false);
+        setCode("");
+        return;
       }
     }
+
+    toast.success("Acesso autorizado!");
     setLoading(false);
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-sm animate-fade-in">
+      <div className="w-full max-w-xs animate-fade-in text-center">
         <div className="flex flex-col items-center mb-8">
           <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-gold shadow-glow mb-4">
             <Scale className="w-7 h-7 text-primary-foreground" />
@@ -46,55 +55,38 @@ export default function Auth() {
         </div>
 
         <div className="bg-card border border-border rounded-xl p-6 shadow-card">
-          <div className="flex mb-6 bg-secondary rounded-lg p-1">
-            <button
-              onClick={() => setIsLogin(true)}
-              className={`flex-1 text-sm py-2 rounded-md transition-colors font-medium ${
-                isLogin ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Entrar
-            </button>
-            <button
-              onClick={() => setIsLogin(false)}
-              className={`flex-1 text-sm py-2 rounded-md transition-colors font-medium ${
-                !isLogin ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Cadastrar
-            </button>
+          <div className="flex items-center justify-center gap-2 mb-5">
+            <ShieldCheck className="w-4 h-4 text-primary" />
+            <span className="text-sm font-medium text-foreground">Código de acesso</span>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm text-muted-foreground">E-mail</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="seu@email.com"
-                className="bg-secondary border-border"
-              />
+          {loading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm text-muted-foreground">Senha</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                placeholder="••••••••"
-                className="bg-secondary border-border"
-              />
+          ) : (
+            <div className="flex justify-center">
+              <InputOTP
+                maxLength={6}
+                value={code}
+                onChange={setCode}
+                onComplete={handleComplete}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} className="w-11 h-12 text-lg font-bold bg-secondary border-border" />
+                  <InputOTPSlot index={1} className="w-11 h-12 text-lg font-bold bg-secondary border-border" />
+                  <InputOTPSlot index={2} className="w-11 h-12 text-lg font-bold bg-secondary border-border" />
+                  <InputOTPSlot index={3} className="w-11 h-12 text-lg font-bold bg-secondary border-border" />
+                  <InputOTPSlot index={4} className="w-11 h-12 text-lg font-bold bg-secondary border-border" />
+                  <InputOTPSlot index={5} className="w-11 h-12 text-lg font-bold bg-secondary border-border" />
+                </InputOTPGroup>
+              </InputOTP>
             </div>
-            <Button type="submit" disabled={loading} className="w-full bg-gradient-gold hover:opacity-90 text-primary-foreground font-semibold">
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : isLogin ? "Entrar" : "Criar conta"}
-            </Button>
-          </form>
+          )}
+
+          <p className="text-[11px] text-muted-foreground mt-5">
+            Digite o código de 6 dígitos para acessar
+          </p>
         </div>
       </div>
     </div>
