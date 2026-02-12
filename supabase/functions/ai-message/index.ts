@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -49,8 +50,11 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
     const body = await req.json();
-    const { action, caseId, caseTitle, distributionDate, defendant, caseType, court, partnerFirm, partnerLawyer, companyContext, context, objective, tone, formality, existingOutputs, recentMessages, caseValue } = body;
+    const { action, caseId, caseTitle, distributionDate, defendant, caseType, court, partnerFirm, partnerLawyer, companyContext, context, objective, tone, formality, existingOutputs, recentMessages, caseValue, userId } = body;
 
     const timePolicy = getTimePolicy(distributionDate, caseValue ?? null);
     const compCtx = companyContext || DEFAULT_COMPANY_CONTEXT;
@@ -65,6 +69,50 @@ ${timePolicy}`;
 
     let systemPrompt = "";
     let userPrompt = "";
+
+    // Fetch operator message history from ALL cases for learning
+    let globalOperatorHistory = "";
+    if (action === "suggest_reply" && userId) {
+      try {
+        const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        // Get all conversations for this user
+        const { data: allConvos } = await sb
+          .from("conversations")
+          .select("id, case_id")
+          .eq("user_id", userId);
+
+        if (allConvos && allConvos.length > 0) {
+          const convoIds = allConvos.map((c: any) => c.id);
+          // Get messages from other cases (exclude current case to avoid duplication)
+          const otherConvoIds = allConvos.filter((c: any) => c.case_id !== caseId).map((c: any) => c.id);
+          
+          if (otherConvoIds.length > 0) {
+            const { data: allMsgs } = await sb
+              .from("messages")
+              .select("sender, message_text, conversation_id, created_at")
+              .in("conversation_id", otherConvoIds)
+              .order("created_at", { ascending: true })
+              .limit(200);
+
+            if (allMsgs && allMsgs.length > 0) {
+              // Group by conversation
+              const grouped: Record<string, any[]> = {};
+              for (const m of allMsgs) {
+                if (!grouped[m.conversation_id]) grouped[m.conversation_id] = [];
+                grouped[m.conversation_id].push(m);
+              }
+              
+              const convTexts = Object.values(grouped).map((msgs: any[]) => 
+                msgs.map((m: any) => `${m.sender}: ${m.message_text}`).join("\n")
+              );
+              globalOperatorHistory = `\n\nHISTÓRICO DE CONVERSAS ANTERIORES DO OPERADOR (outros casos - use para aprender o ESTILO e PADRÃO de comunicação):\n${convTexts.join("\n---\n")}`;
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching global history:", err);
+      }
+    }
 
     if (action === "suggest_reply") {
       const msgsText = (recentMessages || []).map((m: any) => `${m.sender}: ${m.text}`).join("\n");
@@ -82,12 +130,14 @@ IMPORTANTE SOBRE ABORDAGEM:
 ${caseContext}
 
 APRENDIZADO COM HISTÓRICO DE CONVERSAS:
-- Analise TODA a conversa anterior com atenção. Observe como o OPERADOR se comunica: tom, estilo, vocabulário, nível de formalidade, estratégias que usou.
-- Suas sugestões devem IMITAR o estilo do operador, não inventar um estilo diferente. Se o operador é direto, seja direto. Se usa emojis, use emojis. Se é formal, seja formal.
-- Observe quais abordagens do operador FUNCIONARAM (o cliente respondeu positivamente) e quais NÃO funcionaram (cliente ficou em silêncio ou resistente). Priorize o que funcionou.
-- NUNCA repita uma mensagem já enviada. Cada sugestão deve ser uma continuação natural da conversa, levando em conta TUDO que já foi dito.
-- Se o cliente já fez uma pergunta, responda a ela. Se o cliente já deu informações, não peça de novo.
-- Considere o momento atual do funil de vendas baseado no que já aconteceu na conversa.
+- Você tem acesso ao histórico de conversas ANTERIORES do operador com OUTROS clientes (abaixo). Estude-as com atenção.
+- Identifique o PADRÃO de comunicação do operador: tom, estilo, comprimento das mensagens, vocabulário, emojis, nível de formalidade, estratégias de abordagem.
+- Suas sugestões devem IMITAR FIELMENTE esse padrão. Você é um clone do operador, não um assistente genérico.
+- Observe quais abordagens FUNCIONARAM (cliente respondeu positivamente) e quais NÃO funcionaram. Priorize o que funcionou.
+- NUNCA repita uma mensagem já enviada. Cada sugestão deve ser uma continuação natural.
+- Se o cliente já fez uma pergunta, responda a ela. Se já deu informações, não peça de novo.
+- Considere o momento atual do funil baseado no que já aconteceu.
+${globalOperatorHistory}
 
 REGRAS:
 - Nunca se apresente como advogado
@@ -99,14 +149,13 @@ REGRAS:
 - Só mencione o Dr. Bruno DEPOIS que o cliente enviar os dados bancários
 ${timePolicy}
 
-Analise a conversa e classifique o estado emocional do cliente (desconfiado/curioso/resistente/ansioso/interessado).
-Sugira 2 respostas: uma curta e uma padrão, adequadas ao MOMENTO da conversa (se é início, meio ou fim do funil).
-As respostas devem ser no MESMO ESTILO e TOM que o operador usou nas mensagens anteriores.
+Analise a conversa ATUAL e classifique o estado emocional do cliente (desconfiado/curioso/resistente/ansioso/interessado).
+Sugira 2 respostas: uma curta e uma padrão, no MESMO ESTILO e TOM que o operador usa nas conversas anteriores.
 
 Responda em JSON:
 {"state": "...", "short": "resposta curta", "standard": "resposta padrão completa"}`;
 
-      userPrompt = `Conversa recente:\n${msgsText}\n\nSugira respostas adequadas ao momento atual da conversa.`;
+      userPrompt = `Conversa ATUAL com o cliente:\n${msgsText}\n\nCom base no padrão de comunicação do operador (aprendido das conversas anteriores), sugira respostas adequadas ao momento atual.`;
     } else {
       const count = action === "variations_v1" ? 3 : 1;
       const modifier = action === "make_trustworthy" ? "\nFoque em tornar a mensagem mais confiável, incluindo referências ao escritório parceiro e ao processo."
