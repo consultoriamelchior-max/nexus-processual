@@ -10,8 +10,8 @@ import { ArrowLeft, Upload, Loader2, Sparkles, FileText, CheckCircle2, AlertTria
 import { toast } from "sonner";
 import * as pdfjsLib from "pdfjs-dist";
 
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs`;
+// Configure PDF.js worker - use dynamic version to prevent mismatches
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 function formatCurrency(value: string): string {
   const digits = value.replace(/\D/g, "");
