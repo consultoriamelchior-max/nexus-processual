@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Briefcase, User, Calendar, Hash, Trash2 } from "lucide-react";
+import { Plus, Search, Briefcase, User, Calendar, Hash, Trash2, AlertTriangle } from "lucide-react";
 import { getStatusInfo, type Case } from "@/lib/types";
 import { toast } from "sonner";
 import {
@@ -140,6 +140,13 @@ export default function Index() {
                       <Calendar className="w-3 h-3" />
                       <span>{new Date(c.created_at).toLocaleDateString("pt-BR")}</span>
                     </div>
+
+                    {client && !client.phone && (
+                      <div className="flex items-center gap-1.5 text-[10px] text-destructive font-medium mt-2 bg-destructive/10 rounded-md px-2 py-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        <span>Sem telefone registrado</span>
+                      </div>
+                    )}
                   </Link>
 
                   <AlertDialog>
