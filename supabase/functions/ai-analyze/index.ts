@@ -59,6 +59,10 @@ Responda APENAS com JSON válido (sem markdown, sem backticks):
   "perguntas_provaveis": ["3-5 perguntas prováveis do cliente"]
 }`;
 
+    // Truncate text to avoid token limits
+    const truncatedText = extractedText.slice(0, 15000);
+    console.log("Sending text to AI, length:", truncatedText.length);
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -66,11 +70,12 @@ Responda APENAS com JSON válido (sem markdown, sem backticks):
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Telefone fornecido pelo operador: ${phoneProvided || "não informado"}\n\nTexto da petição:\n\n${extractedText.slice(0, 20000)}` },
+          { role: "user", content: `Telefone fornecido pelo operador: ${phoneProvided || "não informado"}\n\nTexto da petição:\n\n${truncatedText}` },
         ],
+        temperature: 0.1,
       }),
     });
 
@@ -92,14 +97,26 @@ Responda APENAS com JSON válido (sem markdown, sem backticks):
 
     const aiResult = await response.json();
     const content = aiResult.choices?.[0]?.message?.content || "";
+    console.log("AI response length:", content.length, "First 200 chars:", content.slice(0, 200));
 
     let extracted: any = {};
     try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      // Try to find JSON in the response, handling markdown code blocks
+      let jsonStr = content;
+      // Remove markdown code blocks if present
+      const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (codeBlockMatch) {
+        jsonStr = codeBlockMatch[1];
+      }
+      const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         extracted = JSON.parse(jsonMatch[0]);
+      } else {
+        console.error("No JSON found in AI response:", content.slice(0, 500));
+        extracted = { summary: content, client_name: "", defendant: "" };
       }
-    } catch {
+    } catch (parseErr) {
+      console.error("JSON parse error:", parseErr, "Content:", content.slice(0, 500));
       extracted = { summary: content, client_name: "", defendant: "" };
     }
 
