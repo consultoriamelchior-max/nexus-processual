@@ -125,34 +125,49 @@ export type Database = {
       }
       clients: {
         Row: {
+          banks: string | null
+          birth_date: string | null
           cpf_or_identifier: string | null
           created_at: string
           email: string | null
           full_name: string
           id: string
+          income: string | null
           notes: string | null
           phone: string
+          profession: string | null
           user_id: string
+          vehicles: string | null
         }
         Insert: {
+          banks?: string | null
+          birth_date?: string | null
           cpf_or_identifier?: string | null
           created_at?: string
           email?: string | null
           full_name: string
           id?: string
+          income?: string | null
           notes?: string | null
           phone: string
+          profession?: string | null
           user_id: string
+          vehicles?: string | null
         }
         Update: {
+          banks?: string | null
+          birth_date?: string | null
           cpf_or_identifier?: string | null
           created_at?: string
           email?: string | null
           full_name?: string
           id?: string
+          income?: string | null
           notes?: string | null
           phone?: string
+          profession?: string | null
           user_id?: string
+          vehicles?: string | null
         }
         Relationships: []
       }
