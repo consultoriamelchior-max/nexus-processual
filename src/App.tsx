@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import NewCase from "./pages/NewCase";
 import CaseDetail from "./pages/CaseDetail";
 import Clients from "./pages/Clients";
+import ClientDetail from "./pages/ClientDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -45,6 +46,7 @@ const App = () => (
           <Route path="/new-case" element={<ProtectedRoute><NewCase /></ProtectedRoute>} />
           <Route path="/case/:id" element={<ProtectedRoute><CaseDetail /></ProtectedRoute>} />
           <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
+          <Route path="/client/:id" element={<ProtectedRoute><ClientDetail /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
