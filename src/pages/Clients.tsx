@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Layout } from "@/components/Layout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, User, Phone, Mail, Trash2, Trash, Download, Upload } from "lucide-react";
+import { Search, User, Phone, Mail, Trash2, Trash, Download, Upload, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import type { Client } from "@/lib/types";
 import {
@@ -102,7 +103,7 @@ export default function Clients() {
       const client = clients.find((c) => c.cpf_or_identifier?.replace(/\D/g, "") === cpf);
       if (!client) continue;
       const existingPhones = client.phone ? client.phone.split(/[,;]\s*/).filter(Boolean) : [];
-      const allPhones = [...new Set([...existingPhones, ...phones])];
+      const allPhones = [...new Set([...existingPhones, ...phones])].slice(0, 5);
       const newPhone = allPhones.join(", ");
       if (newPhone !== client.phone) {
         await supabase.from("clients").update({ phone: newPhone }).eq("id", client.id);
@@ -146,7 +147,7 @@ export default function Clients() {
       const celMatch = block.match(/CELULARES:\s*(.+)/);
       const newPhones = celMatch?.[1]?.match(/\(?\d[\d\s()-]+\d/g)?.map((p) => p.trim()).filter(Boolean) ?? [];
       const existingPhones = client.phone ? client.phone.split(/[,;]\s*/).filter(Boolean) : [];
-      const mergedPhones = [...new Set([...existingPhones, ...newPhones])].join(", ");
+      const mergedPhones = [...new Set([...existingPhones, ...newPhones])].slice(0, 5).join(", ");
 
       // Collect vehicles
       const veicMatch = block.match(/VEÍCULOS:\s*(.+)/);
@@ -249,14 +250,17 @@ export default function Clients() {
                 <div className="w-10 h-10 rounded-full bg-gradient-gold flex items-center justify-center text-sm font-bold text-primary-foreground flex-shrink-0">
                   {c.full_name[0]?.toUpperCase()}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{c.full_name}</p>
+                <Link to={`/client/${c.id}`} className="flex-1 min-w-0 hover:opacity-80 transition-opacity cursor-pointer">
+                  <p className="text-sm font-medium hover:text-primary transition-colors">{c.full_name}</p>
                   <div className="flex flex-wrap gap-3 mt-1">
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground"><Phone className="w-3 h-3" />{c.phone}</span>
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground"><Phone className="w-3 h-3" />{c.phone || "Sem telefone"}</span>
                     {c.email && <span className="flex items-center gap-1 text-xs text-muted-foreground"><Mail className="w-3 h-3" />{c.email}</span>}
                     {c.cpf_or_identifier && <span className="text-xs text-muted-foreground font-mono">CPF: {c.cpf_or_identifier}</span>}
                   </div>
-                </div>
+                </Link>
+                <Link to={`/client/${c.id}`} className="text-muted-foreground hover:text-primary transition-colors flex-shrink-0">
+                  <ChevronRight className="w-4 h-4" />
+                </Link>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button
