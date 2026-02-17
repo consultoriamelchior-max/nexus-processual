@@ -6,6 +6,11 @@ export interface Client {
   phone: string;
   email: string | null;
   notes: string | null;
+  birth_date: string | null;
+  income: string | null;
+  profession: string | null;
+  vehicles: string | null;
+  banks: string | null;
   created_at: string;
 }
 

@@ -90,20 +90,17 @@ export default function Clients() {
     const file = e.target.files?.[0];
     if (!file) return;
     const text = await file.text();
-    // Parse the file format: blocks separated by dashes
     const blocks = text.split(/[-]{5,}/).filter((b) => b.trim());
     let updated = 0;
     for (const block of blocks) {
-      const cpfMatch = block.match(/CPF:\s*(\d+)/);
+      const cpfMatch = block.match(/CPF:\s*([\d.\-]+)/);
       if (!cpfMatch) continue;
-      const cpf = cpfMatch[1];
+      const cpf = cpfMatch[1].replace(/\D/g, "");
       const phoneMatches = block.match(/(?:- |\n\s*)(\(?\d[\d\s()-]+\d)/g);
       if (!phoneMatches || phoneMatches.length === 0) continue;
       const phones = phoneMatches.map((p) => p.replace(/^[\s-]+/, "").trim()).filter(Boolean);
-      // Find client by CPF
-      const client = clients.find((c) => c.cpf_or_identifier?.replace(/\D/g, "") === cpf.replace(/\D/g, ""));
+      const client = clients.find((c) => c.cpf_or_identifier?.replace(/\D/g, "") === cpf);
       if (!client) continue;
-      // Merge phones: keep existing + add new
       const existingPhones = client.phone ? client.phone.split(/[,;]\s*/).filter(Boolean) : [];
       const allPhones = [...new Set([...existingPhones, ...phones])];
       const newPhone = allPhones.join(", ");
@@ -112,10 +109,85 @@ export default function Clients() {
         updated++;
       }
     }
-    // Refresh clients
     const { data } = await supabase.from("clients").select("*").order("full_name");
     setClients((data as Client[]) ?? []);
     toast.success(`${updated} cliente(s) atualizado(s) com novos telefones.`);
+    e.target.value = "";
+  };
+
+  const handleImportLeads = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const blocks = text.split(/[-]{5,}/).filter((b) => b.trim());
+    let updated = 0;
+    let notFound = 0;
+
+    for (const block of blocks) {
+      const cpfMatch = block.match(/CPF:\s*([\d.\-]+)/);
+      if (!cpfMatch) continue;
+      const cpfRaw = cpfMatch[1].replace(/\D/g, "");
+      if (!cpfRaw) continue;
+
+      const client = clients.find((c) => c.cpf_or_identifier?.replace(/\D/g, "") === cpfRaw);
+      if (!client) { notFound++; continue; }
+
+      const getValue = (key: string) => {
+        const match = block.match(new RegExp(`${key}:\\s*(.+?)(?=\\n[A-ZÀ-Ú]+:|$)`, "s"));
+        const val = match?.[1]?.trim();
+        return val && val !== "N/A" && val !== "Nenhum" ? val : null;
+      };
+
+      const nascMatch = block.match(/NASC:\s*([\d/]+)/);
+      const rendaMatch = block.match(/RENDA:\s*(.+)/);
+      const profMatch = block.match(/PROFISSÃO:\s*(.+)/);
+
+      // Collect phones from CELULARES line
+      const celMatch = block.match(/CELULARES:\s*(.+)/);
+      const newPhones = celMatch?.[1]?.match(/\(?\d[\d\s()-]+\d/g)?.map((p) => p.trim()).filter(Boolean) ?? [];
+      const existingPhones = client.phone ? client.phone.split(/[,;]\s*/).filter(Boolean) : [];
+      const mergedPhones = [...new Set([...existingPhones, ...newPhones])].join(", ");
+
+      // Collect vehicles
+      const veicMatch = block.match(/VEÍCULOS:\s*(.+)/);
+      const vehicles = veicMatch?.[1]?.trim();
+      const vehiclesVal = vehicles && vehicles !== "Nenhum" && vehicles !== "N/A" ? vehicles : null;
+
+      // Collect banks (may span multiple lines until CELULARES)
+      const banksMatch = block.match(/BANCOS:\s*([\s\S]+?)(?=CELULARES:|$)/);
+      let banksVal: string | null = null;
+      if (banksMatch) {
+        const raw = banksMatch[1]
+          .split(/[,\n]/)
+          .map((b) => b.trim())
+          .filter((b) => b && b !== "N/A" && b !== "null" && !b.startsWith("Agência"));
+        banksVal = [...new Set(raw)].join(", ") || null;
+      }
+
+      const nascVal = nascMatch?.[1]?.trim() || null;
+      const rendaVal = rendaMatch?.[1]?.trim();
+      const rendaFinal = rendaVal && rendaVal !== "N/A" ? rendaVal : null;
+      const profVal = profMatch?.[1]?.trim();
+      const profFinal = profVal && profVal !== "N/A" && profVal !== "" ? profVal : null;
+
+      const updateData: Record<string, any> = {};
+      if (nascVal) updateData.birth_date = nascVal;
+      if (rendaFinal) updateData.income = rendaFinal;
+      if (profFinal) updateData.profession = profFinal;
+      if (vehiclesVal) updateData.vehicles = vehiclesVal;
+      if (banksVal) updateData.banks = banksVal;
+      if (mergedPhones && mergedPhones !== client.phone) updateData.phone = mergedPhones;
+
+      if (Object.keys(updateData).length > 0) {
+        await supabase.from("clients").update(updateData).eq("id", client.id);
+        updated++;
+      }
+    }
+
+    const { data } = await supabase.from("clients").select("*").order("full_name");
+    setClients((data as Client[]) ?? []);
+    toast.success(`${updated} cliente(s) atualizado(s).`);
+    if (notFound > 0) toast.info(`${notFound} CPF(s) não encontrados na base.`);
     e.target.value = "";
   };
 
@@ -141,6 +213,12 @@ export default function Clients() {
                 <input type="file" accept=".txt" className="hidden" onChange={handleUploadPhones} />
                 <Button variant="outline" size="sm" className="text-xs cursor-pointer" asChild>
                   <span><Upload className="w-4 h-4 mr-1.5" /> Importar telefones</span>
+                </Button>
+              </label>
+              <label>
+                <input type="file" accept=".txt" className="hidden" onChange={handleImportLeads} />
+                <Button variant="outline" size="sm" className="text-xs cursor-pointer" asChild>
+                  <span><Upload className="w-4 h-4 mr-1.5" /> Importar Leads</span>
                 </Button>
               </label>
               <Button variant="outline" onClick={() => setShowDeleteAll(true)} className="text-destructive border-destructive/30 hover:bg-destructive/10">

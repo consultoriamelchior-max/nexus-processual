@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -8,8 +7,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Download, FileText, FileDown } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
-import type { Case } from "@/lib/types";
+import type { Case, Client } from "@/lib/types";
 import jsPDF from "jspdf";
 
 interface Props {
@@ -45,13 +43,32 @@ function buildInitialMessage(caseData: Case): string {
   return `Olá, ${firstName}! Tenho novidades sobre sua ação de revisão contra o ${defendantName} (Comarca de ${courtDisplay}). Poderia confirmar se recebeu esta mensagem?`;
 }
 
-function buildExportContent(caseData: Case): { title: string; author: string; cpf: string; phones: string; summary: string; initialMessage: string } {
-  const client = (caseData as any).clients;
+interface ExportContent {
+  title: string;
+  author: string;
+  cpf: string;
+  phones: string;
+  birthDate: string;
+  income: string;
+  profession: string;
+  vehicles: string;
+  banks: string;
+  summary: string;
+  initialMessage: string;
+}
+
+function buildExportContent(caseData: Case): ExportContent {
+  const client = (caseData as any).clients as Client | undefined;
   return {
     title: caseData.case_title,
     author: client ? toTitleCase(client.full_name) : "Não informado",
     cpf: client?.cpf_or_identifier || "Não informado",
     phones: client?.phone || "Não informado",
+    birthDate: client?.birth_date || "Não informado",
+    income: client?.income || "Não informado",
+    profession: client?.profession || "Não informado",
+    vehicles: client?.vehicles || "Nenhum",
+    banks: client?.banks || "Não informado",
     summary: caseData.case_summary || "Sem resumo disponível.",
     initialMessage: buildInitialMessage(caseData),
   };
@@ -68,6 +85,11 @@ function exportAsTxt(caseData: Case) {
     `👤 AUTOR: ${c.author}`,
     `📄 CPF: ${c.cpf}`,
     `📞 TELEFONES: ${c.phones}`,
+    `🎂 NASCIMENTO: ${c.birthDate}`,
+    `💰 RENDA: ${c.income}`,
+    `💼 PROFISSÃO: ${c.profession}`,
+    `🚗 VEÍCULOS: ${c.vehicles}`,
+    `🏦 BANCOS: ${c.banks}`,
     ``,
     `${"─".repeat(50)}`,
     `📝 RESUMO DO CASO`,
@@ -103,10 +125,7 @@ function exportAsPdf(caseData: Case) {
     doc.setTextColor(...color);
     const lines = doc.splitTextToSize(text, maxWidth);
     for (const line of lines) {
-      if (y > 275) {
-        doc.addPage();
-        y = 20;
-      }
+      if (y > 275) { doc.addPage(); y = 20; }
       doc.text(line, margin, y);
       y += size * 0.5;
     }
@@ -121,33 +140,33 @@ function exportAsPdf(caseData: Case) {
     y += 6;
   };
 
-  // Title
   addText("FICHA DO CASO", 16, true, [120, 90, 40]);
   y += 4;
   addSeparator();
 
-  // Case title
   addText(c.title, 13, true);
   y += 4;
 
-  // Client info
-  addText(`Autor: ${c.author}`, 10, false);
-  addText(`CPF: ${c.cpf}`, 10, false);
-  addText(`Telefones: ${c.phones}`, 10, false);
+  addText(`Autor: ${c.author}`, 10);
+  addText(`CPF: ${c.cpf}`, 10);
+  addText(`Telefones: ${c.phones}`, 10);
+  addText(`Nascimento: ${c.birthDate}`, 10);
+  addText(`Renda: ${c.income}`, 10);
+  addText(`Profissão: ${c.profession}`, 10);
+  addText(`Veículos: ${c.vehicles}`, 10);
+  addText(`Bancos: ${c.banks}`, 10);
   y += 4;
   addSeparator();
 
-  // Summary
   addText("RESUMO DO CASO", 11, true, [120, 90, 40]);
   y += 2;
-  addText(c.summary, 10, false);
+  addText(c.summary, 10);
   y += 4;
   addSeparator();
 
-  // Initial message
   addText("MENSAGEM INICIAL", 11, true, [120, 90, 40]);
   y += 2;
-  addText(c.initialMessage, 10, false);
+  addText(c.initialMessage, 10);
 
   doc.save(`ficha-${caseData.case_title.replace(/\s+/g, "-").toLowerCase()}.pdf`);
   toast.success("Ficha exportada em PDF!");
