@@ -32,13 +32,13 @@ REGRA DE TELEFONE (CRÍTICO):
 - IGNORE o campo "phone_found". Coloque tudo em "phone_contract".
 - CUIDADO: Descarte telefones de advogados (perto de OAB).
 
-RESUMO ULTRA-CONCISO (CRÍTICO):
-- O campo "summary" deve ser CURTO e DIRETO.
-- MÁXIMO 300 CARACTERES.
-- PROIBIDO: Listar números de contrato, CPFs, RGs ou detalhes técnicos exaustivos.
-- Objetivo: Apenas citar o que o cliente quer (ex: revisional) e contra qual banco.
+RESUMO ESSENCIAL (MÁXIMA PRIORIDADE):
+- O campo "summary" deve ter NO MÁXIMO 150 CARACTERES.
+- DEVE ser apenas uma frase curta e direta.
+- PROIBIDO: Datas, números de contrato, CPFs, RGs, jurisprudência ou valores exatos.
+- FOCO: Quem contra Quem e Qual o motivo básico.
 
-Exemplo de resumo: "O autor busca a revisão de juros abusivos de um contrato de financiamento de veículo com o Banco OMNI, alegando taxas acima da média de mercado."
+Exemplo: "O autor requer a baixa de negativação indevida e reparação por danos morais contra o Banco OMNI."
 
 Responda APENAS com JSON válido:
 {
