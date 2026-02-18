@@ -79,7 +79,7 @@ Responda em JSON: { "analysis": "...", "suggestions": [{"label": "...", "text": 
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.0-flash",
+        model: "google/gemini-2.5-flash",
         messages: aiMessages,
         temperature: 0.1,
         response_format: { type: "json_object" }
@@ -88,14 +88,34 @@ Responda em JSON: { "analysis": "...", "suggestions": [{"label": "...", "text": 
 
     if (!response.ok) {
       const err = await response.text();
+      console.error(`AI Gateway Error (${response.status}):`, err);
       return new Response(JSON.stringify({ error: `IA Error: ${response.status}`, details: err }), {
-        status: 200, // Return 200 to let frontend handle the error object without generic toast
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const result = await response.json();
-    return new Response(JSON.stringify(result.choices?.[0]?.message?.content ? JSON.parse(result.choices[0].message.content) : {}), {
+    const rawContent = result.choices?.[0]?.message?.content || "{}";
+    console.log("Raw AI Response:", rawContent);
+
+    let parsed = {};
+    try {
+      // Remove possible markdown code blocks
+      const cleanJson = rawContent.replace(/```json\s?|```/g, "").trim();
+      parsed = JSON.parse(cleanJson);
+    } catch (parseErr) {
+      console.error("JSON Parse Error:", parseErr, "Raw content:", rawContent);
+      // Fallback for non-JSON responses
+      const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
+      } else {
+        parsed = { error: "Erro ao processar resposta da IA", details: rawContent };
+      }
+    }
+
+    return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
