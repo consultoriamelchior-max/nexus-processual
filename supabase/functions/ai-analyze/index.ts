@@ -23,36 +23,37 @@ serve(async (req) => {
 
     const isOmni = contractType === "omni";
 
-    const systemPrompt = `Você é um assistente jurídico especializado em análise de documentos brasileiros de financiamento e petições iniciais.
+    const systemPrompt = `Você é um assistente jurídico especializado em análise de documentos brasileiros de financiamento (CCB) e petições iniciais.
     
 TAREFA: Extraia dados estruturados combinando as informações da PETIÇÃO e do CONTRATO judicial.
 
-DIRETRIZES DE EXTRAÇÃO DE TELEFONE (CRÍTICO):
+DIRETRIZES DE EXTRAÇÃO DE TELEFONE (ALTA PRIORIDADE):
 - O campo "phone_contract" é o seu objetivo principal. Ele deve conter o telefone de contato direto do CLIENTE.
-- ONDE BUSCAR NO CONTRATO (CCB): Procure no bloco de "Dados do Emitente/Devedor". Em contratos OMNI, o telefone aparece frequentemente como "Celular:" logo abaixo do e-mail. Extraia o DDD e o número (ex: 53999493280).
-- ONDE BUSCAR NA PETIÇÃO: Procure na seção de "QUALIFICAÇÃO DO AUTOR" (início da petição, onde consta o Nome, CPF e Endereço). O telefone geralmente está logo após o endereço ou e-mail do autor.
-- CUIDADO COM ADVOGADOS: Ignore telefones próximos a números de OAB ou carimbos de advogados.
-- MAPEAMENTO: Qualquer telefone do cliente encontrado deve ir para "phone_contract".
+- BUSCA EXAUSTIVA: Procure por rótulos como "Celular:", "Fone:", "Telefone:", "Tel:", "WhatsApp:", "Contato:".
+- NO CONTRATO (CCB): Geralmente está no bloco de identificação do emitente/devedor, logo abaixo ou ao lado do e-mail e endereço.
+- NA PETIÇÃO: Geralmente está no parágrafo de qualificação do autor no início do documento.
+- MAPEAMENTO: Qualquer telefone do cliente encontrado nos documentos DEVE ser retornado no campo "phone_contract".
+- CUIDADO: Ignore telefones claramente associados apenas a advogados (perto de OAB).
 
-RESUMO EXECUTIVO (CRÍTICO):
-- O campo "summary" deve ser um resumo de 2 a 3 frases concisas.
-- Deve ser COMPLETO: cite o Autor, o Réu (Banco), o motivo da ação (ex: revisional) e o veículo envolvido se houver.
-- Sem detalhes técnicos excessivos (CPFs, números longos de contrato ou jurisprudência).
+RESUMO EXECUTIVO:
+- Resumo de 2 a 3 frases concisas.
+- Deve identificar Autor, Réu, objetivo da ação e motivo principal.
+- Evite detalhes técnicos desnecessários como CPFs e jurisprudência.
 
 Responda APENAS com JSON válido:
 {
-  "client_name": "Nome Completo do Autor",
-  "client_cpf": "CPF do autor (apenas dígitos)",
-  "defendant": "Nome do Réu (geralmente o banco)",
-  "case_type": "Tipo da ação",
-  "court": "Vara e Comarca",
-  "process_number": "Número do processo",
+  "client_name": "Nome",
+  "client_cpf": "CPF",
+  "defendant": "Réu",
+  "case_type": "Ação",
+  "court": "Vara",
+  "process_number": "Processo",
   "distribution_date": "YYYY-MM-DD",
-  "case_value": 123.45,
-  "lawyers": [{"name": "...", "oab": "...", "role": "advogado do autor"}],
+  "case_value": 0.00,
+  "lawyers": [{"name": "...", "oab": "...", "role": "..."}],
   "partner_law_firm": "Escritório",
-  "phone_contract": "Telefone do Autor (apenas dígitos)",
-  "summary": "Resumo conciso e informativo de 2-3 frases."
+  "phone_contract": "Apenas dígitos do telefone encontrado",
+  "summary": "Resumo equilibrado"
 }`;
 
     // Truncate texts to avoid token limits

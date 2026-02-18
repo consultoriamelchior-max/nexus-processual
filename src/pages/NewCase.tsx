@@ -71,36 +71,37 @@ export default function NewCase() {
   const extractTextFromPdf = async (file: File): Promise<string> => {
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const pages: string[] = [];
+    let fullText = "";
 
-    for (let i = 1; i <= Math.min(pdf.numPages, 20); i++) {
+    for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      const text = content.items.map((item: any) => item.str).join(" ");
-      pages.push(text);
+
+      // Sort items by vertical position then horizontal
+      const items = content.items as any[];
+      items.sort((a, b) => {
+        if (Math.abs(a.transform[5] - b.transform[5]) > 5) {
+          return b.transform[5] - a.transform[5]; // Top to bottom
+        }
+        return a.transform[4] - b.transform[4]; // Left to right
+      });
+
+      const pageText = items.map((item: any) => item.str).join(" ");
+      fullText += pageText + "\n\n";
     }
 
-    return pages.join("\n\n");
+    return fullText;
   };
 
   const handleProcessPdf = async () => {
-    if (!pdfFile) {
-      toast.error("Selecione um PDF primeiro.");
+    if (!pdfFile && !contractFile) {
+      toast.error("Selecione pelo menos um arquivo.");
       return;
     }
 
     setExtracting(true);
     try {
-      // 1. Extract text client-side
-      const pdfText = await extractTextFromPdf(pdfFile);
-
-      if (!pdfText.trim()) {
-        toast.error("Não foi possível extrair texto do PDF. O arquivo pode ser uma imagem escaneada.");
-        setExtracting(false);
-        return;
-      }
-
-      // 2. Send to AI for structured extraction
+      const pdfText = pdfFile ? await extractTextFromPdf(pdfFile) : "";
       const contractText = contractFile ? await extractTextFromPdf(contractFile) : "";
 
       const { data, error } = await supabase.functions.invoke("ai-analyze", {
@@ -114,10 +115,11 @@ export default function NewCase() {
 
       if (error) throw error;
 
-      const ext = data?.extracted as ExtractedData;
+      const ext = data?.extracted as any;
       if (!ext) throw new Error("Resposta inesperada da IA.");
 
-      setExtracted(ext);
+      setExtracted(ext as ExtractedData);
+      console.log("Extracted result:", ext);
 
       // Pre-fill fields
       setClientName(ext.client_name || "");
@@ -129,23 +131,20 @@ export default function NewCase() {
       setProcessNumber(ext.process_number || "");
       setDistributionDate(ext.distribution_date || "");
       setPartnerFirm(ext.partner_law_firm || "");
-      // Format case_value from AI (comes as "50000.00" string)
+
       if (ext.case_value) {
         const numVal = parseFloat(String(ext.case_value).replace(/[^\d.]/g, ""));
         if (!isNaN(numVal)) {
           setCaseValue(numVal.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-        } else {
-          setCaseValue("");
         }
-      } else {
-        setCaseValue("");
       }
-      // Pick the first lawyer as partner
+
       if (ext.lawyers?.length > 0) {
-        setPartnerLawyer(ext.lawyers.map((l) => `${l.name} (${l.oab})`).join(", "));
+        setPartnerLawyer(ext.lawyers.map((l: any) => `${l.name} (${l.oab})`).join(", "));
       }
-      // Map any found phone to phoneContract (never to consulta/phone)
-      const extractedPhone = ext.phone_contract || ext.phone_found;
+
+      // Robust phone mapping: catch any field the AI might use
+      const extractedPhone = ext.phone_contract || ext.phone_petition || ext.phone_found || ext.phone;
       if (extractedPhone) {
         setPhoneContract(formatPhone(extractedPhone));
       }
