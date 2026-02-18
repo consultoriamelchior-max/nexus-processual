@@ -6,7 +6,7 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Upload, Loader2, Sparkles, FileText, CheckCircle2, AlertTriangle, Phone } from "lucide-react";
+import { ArrowLeft, Upload, Loader2, Sparkles, FileText, CheckCircle2, AlertTriangle, Phone, Building2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import * as pdfjsLib from "pdfjs-dist";
@@ -41,14 +41,20 @@ interface ExtractedData {
   partner_law_firm: string;
   summary: string;
   phone_found: string;
+  phone_contract: string;
 }
+
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function NewCase() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
   const [phone, setPhone] = useState("");
+  const [phoneContract, setPhoneContract] = useState("");
+  const [contractType, setContractType] = useState("omni");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [contractFile, setContractFile] = useState<File | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [extracted, setExtracted] = useState<ExtractedData | null>(null);
   const [saving, setSaving] = useState(false);
@@ -100,9 +106,13 @@ export default function NewCase() {
       }
 
       // 2. Send to AI for structured extraction
+      const contractText = contractFile ? await extractTextFromPdf(contractFile) : "";
+
       const { data, error } = await supabase.functions.invoke("ai-analyze", {
         body: {
-          extractedText: pdfText,
+          petitionText: pdfText,
+          contractText: contractText,
+          contractType: contractType,
           phoneProvided: phone,
         },
       });
@@ -143,10 +153,33 @@ export default function NewCase() {
       if (ext.phone_found && !phone) {
         setPhone(formatPhone(ext.phone_found));
       }
+      // If phone was found in Contract
+      if (ext.phone_contract) {
+        setPhoneContract(formatPhone(ext.phone_contract));
+      }
 
-      toast.success("PDF processado! Confira os dados extraídos.");
+      toast.success("Documentos processados! Confira os dados extraídos.");
     } catch (err: any) {
-      toast.error(err.message || "Erro ao processar PDF.");
+      console.error("Erro no processamento:", err);
+      // Try to extract more detail from Supabase function error
+      let errorMessage = "Erro ao processar documentos.";
+
+      if (err.message) errorMessage = err.message;
+
+      // Handle the case where err is the response or has context
+      if (err.context?.json?.error) {
+        errorMessage = err.context.json.error;
+      } else if (typeof err === 'object' && err !== null) {
+        try {
+          // Some versions of the client return the error in a different format
+          const errorStr = JSON.stringify(err);
+          if (errorStr.includes("non-2xx")) {
+            errorMessage = "A IA demorou muito ou falhou. Tente novamente em instantes ou verifique os arquivos.";
+          }
+        } catch (e) { }
+      }
+
+      toast.error(errorMessage);
     }
     setExtracting(false);
   };
@@ -169,8 +202,9 @@ export default function NewCase() {
           full_name: clientName,
           cpf_or_identifier: clientCpf || null,
           phone: phoneDigits,
+          phone_contract: phoneContract.replace(/\D/g, "") || null,
           user_id: user.id,
-        })
+        } as any)
         .select()
         .single();
       if (clientErr) throw clientErr;
@@ -197,14 +231,11 @@ export default function NewCase() {
         .single();
       if (caseErr) throw caseErr;
 
-      // 3. Upload PDF and save document
+      // 3. Upload files and save documents
       if (pdfFile) {
         const filePath = `${user.id}/${caseResult.id}/${pdfFile.name}`;
-        const { error: uploadErr } = await supabase.storage.from("documents").upload(filePath, pdfFile);
-        if (uploadErr) console.warn("Upload warning:", uploadErr.message);
-
-        const pdfText = extracted ? await extractTextFromPdf(pdfFile).catch(() => "") : "";
-
+        await supabase.storage.from("documents").upload(filePath, pdfFile);
+        const pdfText = await extractTextFromPdf(pdfFile).catch(() => "");
         await supabase.from("documents").insert({
           case_id: caseResult.id,
           user_id: user.id,
@@ -212,6 +243,19 @@ export default function NewCase() {
           file_url: filePath,
           extracted_text: pdfText || null,
           extracted_json: extracted ? (extracted as any) : null,
+        });
+      }
+
+      if (contractFile) {
+        const filePath = `${user.id}/${caseResult.id}/${contractFile.name}`;
+        await supabase.storage.from("documents").upload(filePath, contractFile);
+        const contractText = await extractTextFromPdf(contractFile).catch(() => "");
+        await supabase.from("documents").insert({
+          case_id: caseResult.id,
+          user_id: user.id,
+          doc_type: "contrato",
+          file_url: filePath,
+          extracted_text: contractText || null,
         });
       }
 
@@ -240,61 +284,85 @@ export default function NewCase() {
 
         <h1 className="text-2xl font-bold mb-1">Novo Caso</h1>
         <p className="text-sm text-muted-foreground mb-6">
-          Envie a petição e a IA extrairá os dados automaticamente.
+          Envie a petição e o contrato para extração automática dos dados.
         </p>
 
         {/* Step 1: Phone + PDF */}
         {!extracted && (
           <div className="bg-card border border-border rounded-xl p-6 shadow-card animate-fade-in space-y-5">
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <Phone className="w-3 h-3" /> Telefone do cliente (se tiver)
-              </Label>
-              <Input
-                value={phone}
-                onChange={(e) => setPhone(formatPhone(e.target.value))}
-                placeholder="(55) 99999-9999"
-                maxLength={15}
-                className="bg-secondary border-border"
-              />
-              <p className="text-[10px] text-muted-foreground">Se o telefone estiver na petição, será extraído automaticamente.</p>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Building2 className="w-3 h-3" /> Tipo de Contrato
+                </Label>
+                <Select value={contractType} onValueChange={setContractType}>
+                  <SelectTrigger className="bg-secondary border-border text-xs">
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="omni">Omni Financiamentos</SelectItem>
+                    <SelectItem value="outros">Outros / Desconhecido</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <FileText className="w-3 h-3" /> Petição Inicial (PDF) *
-              </Label>
-              <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary/50 transition-colors bg-secondary/50">
-                {pdfFile ? (
-                  <div className="flex flex-col items-center gap-2">
-                    <CheckCircle2 className="w-6 h-6 text-primary" />
-                    <span className="text-sm text-foreground font-medium">{pdfFile.name}</span>
-                    <span className="text-[10px] text-muted-foreground">{(pdfFile.size / 1024 / 1024).toFixed(2)} MB</span>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-2">
-                    <Upload className="w-6 h-6 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">Clique para selecionar o PDF da petição</span>
-                  </div>
-                )}
-                <input type="file" accept=".pdf" className="hidden" onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)} />
-              </label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <FileText className="w-3 h-3" /> Petição Inicial (PDF) *
+                </Label>
+                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary/50 transition-colors bg-secondary/50">
+                  {pdfFile ? (
+                    <div className="flex flex-col items-center gap-1 p-2 text-center">
+                      <CheckCircle2 className="w-5 h-5 text-primary" />
+                      <span className="text-[11px] text-foreground font-medium truncate max-w-full">{pdfFile.name}</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1">
+                      <Upload className="w-5 h-5 text-muted-foreground" />
+                      <span className="text-[10px] text-muted-foreground">Petição Judicial</span>
+                    </div>
+                  )}
+                  <input type="file" accept=".pdf" className="hidden" onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)} />
+                </label>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <FileText className="w-3 h-3" /> Contrato/CCB (PDF)
+                </Label>
+                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary/50 transition-colors bg-secondary/50">
+                  {contractFile ? (
+                    <div className="flex flex-col items-center gap-1 p-2 text-center">
+                      <CheckCircle2 className="w-5 h-5 text-primary" />
+                      <span className="text-[11px] text-foreground font-medium truncate max-w-full">{contractFile.name}</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1">
+                      <Upload className="w-5 h-5 text-muted-foreground" />
+                      <span className="text-[10px] text-muted-foreground">Contrato de Financiamento</span>
+                    </div>
+                  )}
+                  <input type="file" accept=".pdf" className="hidden" onChange={(e) => setContractFile(e.target.files?.[0] ?? null)} />
+                </label>
+              </div>
             </div>
 
             <Button
               onClick={handleProcessPdf}
-              disabled={!pdfFile || extracting}
+              disabled={(!pdfFile && !contractFile) || extracting}
               className="w-full bg-gradient-gold text-primary-foreground hover:opacity-90 font-semibold"
             >
               {extracting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Processando com IA...
+                  Analisando documentos...
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 mr-2" />
-                  Processar PDF com IA
+                  Processar com IA
                 </>
               )}
             </Button>
@@ -343,26 +411,30 @@ export default function NewCase() {
                 </div>
               </div>
 
-              {/* Phone - separated with warning when empty */}
-              <div className={`rounded-lg p-4 space-y-2 ${!phone.trim() ? 'border-2 border-destructive/60 bg-destructive/5' : 'border border-border bg-secondary/30'}`}>
-                <Label className={`text-xs flex items-center gap-1.5 font-medium ${!phone.trim() ? 'text-destructive' : 'text-muted-foreground'}`}>
-                  {!phone.trim() && <AlertTriangle className="w-3.5 h-3.5" />}
-                  <Phone className="w-3 h-3" />
-                  Telefone do cliente
-                </Label>
-                <Input
-                  value={phone}
-                  onChange={(e) => setPhone(formatPhone(e.target.value))}
-                  maxLength={15}
-                  placeholder="(55) 99999-9999"
-                  className={`bg-secondary border-border ${!phone.trim() ? 'border-destructive/40' : ''}`}
-                />
-                {!phone.trim() && (
-                  <p className="text-[10px] text-destructive font-medium flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" /> Nenhum telefone registrado — não será possível iniciar conversa.
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className={`rounded-lg p-3 space-y-1 border border-border bg-secondary/30`}>
+                  <Label className={`text-[10px] flex items-center gap-1.5 font-semibold text-muted-foreground uppercase`}>
+                    <Phone className="w-3 h-3" /> Telefone do Contrato
+                  </Label>
+                  <p className="text-sm font-medium px-1">
+                    {phoneContract || <span className="text-muted-foreground italic font-normal">Não encontrado</span>}
                   </p>
-                )}
+                </div>
+
+                <div className={`rounded-lg p-3 space-y-1 ${!phone.trim() && !phoneContract.trim() ? 'border-2 border-destructive/60 bg-destructive/5' : 'border border-border bg-secondary/30'}`}>
+                  <Label className={`text-[10px] flex items-center gap-1.5 font-semibold ${!phone.trim() ? 'text-destructive' : 'text-muted-foreground'} uppercase`}>
+                    <Phone className="w-3 h-3" /> Telefone Consulta
+                  </Label>
+                  <p className="text-sm font-medium px-1">
+                    {phone || <span className="text-muted-foreground italic font-normal">Não encontrado</span>}
+                  </p>
+                </div>
               </div>
+              {!phone.trim() && !phoneContract.trim() && (
+                <p className="text-[10px] text-destructive font-medium flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" /> Nenhum telefone registrado — não será possível iniciar conversa.
+                </p>
+              )}
 
               <hr className="border-border" />
 

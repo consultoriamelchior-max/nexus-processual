@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Briefcase, Users, LogOut, Scale, MessageSquare } from "lucide-react";
+import { Briefcase, Users, LogOut, Scale } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 
@@ -34,11 +34,10 @@ export function Layout({ children }: { children: ReactNode }) {
               <Link
                 key={item.to}
                 to={item.to}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                  active
-                    ? "bg-sidebar-accent text-primary font-medium"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
-                }`}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${active
+                  ? "bg-sidebar-accent text-primary font-medium"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
+                  }`}
               >
                 <item.icon className="w-4 h-4" />
                 {item.label}

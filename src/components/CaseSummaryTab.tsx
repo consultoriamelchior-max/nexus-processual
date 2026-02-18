@@ -46,43 +46,74 @@ function currencyToNumber(formatted: string): number | null {
 }
 
 function ClientPhoneEditor({ client, onRefresh }: { client: any; onRefresh: () => void }) {
-  const [editing, setEditing] = useState(false);
-  const [phone, setPhone] = useState(client.phone || "");
+  const [editingField, setEditingField] = useState<"phone" | "phone_contract" | null>(null);
+  const [phoneValue, setPhoneValue] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const hasPhone = !!client.phone?.trim();
-
   const handleSave = async () => {
+    if (!editingField) return;
     setSaving(true);
-    const { error } = await supabase.from("clients").update({ phone }).eq("id", client.id);
+    const { error } = await supabase.from("clients").update({ [editingField]: phoneValue }).eq("id", client.id);
     if (error) toast.error("Erro ao salvar telefone.");
-    else { toast.success("Telefone atualizado!"); setEditing(false); onRefresh(); }
+    else { toast.success("Telefone atualizado!"); setEditingField(null); onRefresh(); }
     setSaving(false);
   };
 
-  if (editing) {
-    return (
-      <div className="flex items-center gap-1.5">
-        <Phone className="w-3 h-3 text-muted-foreground" />
-        <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(11) 99999-9999" className="h-7 w-40 text-xs bg-secondary border-border" />
-        <Button size="sm" variant="outline" onClick={handleSave} disabled={saving} className="h-7 text-xs px-2">
-          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setPhone(client.phone || ""); }} className="h-7 text-xs px-2">Cancelar</Button>
-      </div>
-    );
-  }
+  const startEditing = (field: "phone" | "phone_contract", val: string) => {
+    setEditingField(field);
+    setPhoneValue(val || "");
+  };
 
   return (
-    <div className={`flex items-center gap-1.5 ${!hasPhone ? 'bg-destructive/10 rounded-md px-2 py-1' : ''}`}>
-      {!hasPhone && <AlertTriangle className="w-3 h-3 text-destructive" />}
-      <Phone className="w-3 h-3 text-muted-foreground" />
-      <span className={`text-xs ${!hasPhone ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
-        {hasPhone ? client.phone : "Sem telefone"}
-      </span>
-      <button onClick={() => setEditing(true)} className="text-muted-foreground hover:text-foreground transition-colors">
-        <Pencil className="w-3 h-3" />
-      </button>
+    <div className="space-y-2">
+      {/* Telefone Consulta */}
+      <div className="flex flex-col gap-1">
+        <span className="text-[10px] text-muted-foreground uppercase font-semibold">Telefone Consulta</span>
+        {editingField === "phone" ? (
+          <div className="flex items-center gap-1.5">
+            <Input value={phoneValue} onChange={(e) => setPhoneValue(e.target.value)} placeholder="(11) 99999-9999" className="h-7 w-40 text-xs bg-secondary border-border" />
+            <Button size="sm" variant="outline" onClick={handleSave} disabled={saving} className="h-7 text-xs px-2">
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setEditingField(null)} className="h-7 text-xs px-2">Cancelar</Button>
+          </div>
+        ) : (
+          <div className={`flex items-center gap-1.5 ${!client.phone?.trim() ? 'bg-destructive/10 rounded-md px-2 py-1' : ''}`}>
+            {!client.phone?.trim() && <AlertTriangle className="w-3 h-3 text-destructive" />}
+            <Phone className="w-3 h-3 text-muted-foreground" />
+            <span className={`text-xs ${!client.phone?.trim() ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+              {client.phone || "Sem telefone"}
+            </span>
+            <button onClick={() => startEditing("phone", client.phone)} className="text-muted-foreground hover:text-foreground transition-colors">
+              <Pencil className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Telefone Contrato */}
+      <div className="flex flex-col gap-1">
+        <span className="text-[10px] text-muted-foreground uppercase font-semibold">Telefone do Contrato</span>
+        {editingField === "phone_contract" ? (
+          <div className="flex items-center gap-1.5">
+            <Input value={phoneValue} onChange={(e) => setPhoneValue(e.target.value)} placeholder="(11) 99999-9999" className="h-7 w-40 text-xs bg-secondary border-border" />
+            <Button size="sm" variant="outline" onClick={handleSave} disabled={saving} className="h-7 text-xs px-2">
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setEditingField(null)} className="h-7 text-xs px-2">Cancelar</Button>
+          </div>
+        ) : (
+          <div className={`flex items-center gap-1.5 ${!client.phone_contract?.trim() ? 'bg-secondary/50 rounded-md px-2 py-1' : ''}`}>
+            <Phone className="w-3 h-3 text-primary" />
+            <span className={`text-xs ${!client.phone_contract?.trim() ? 'text-muted-foreground italic' : 'text-foreground font-semibold'}`}>
+              {client.phone_contract || "Não extraído"}
+            </span>
+            <button onClick={() => startEditing("phone_contract", client.phone_contract)} className="text-muted-foreground hover:text-foreground transition-colors">
+              <Pencil className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

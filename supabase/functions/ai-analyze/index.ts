@@ -12,56 +12,63 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const { extractedText, phoneProvided, caseId, documentId } = await req.json();
+    const { petitionText, contractText, contractType, phoneProvided } = await req.json();
 
-    if (!extractedText?.trim()) {
+    if (!petitionText?.trim() && !contractText?.trim()) {
       return new Response(JSON.stringify({ error: "Nenhum texto disponível para análise." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const systemPrompt = `Você é um assistente jurídico especializado em análise de petições brasileiras.
+    const isOmni = contractType === "omni";
 
-TAREFA: Extraia dados estruturados da petição. 
+    const systemPrompt = `Você é um assistente jurídico especializado em análise de documentos brasileiros de financiamento e petições iniciais.
+
+Você receberá dois textos:
+1. TEXTO DA PETIÇÃO: Uma petição inicial de um processo judicial.
+2. TEXTO DO CONTRATO (CCB): Um contrato de financiamento (Cédula de Crédito Bancário - CCB).
+
+TAREFA: Extraia dados estruturados combinando as informações de ambos os documentos.
+
+DADOS DO CONTRATO (CCB):
+- O campo "Celular" ou "Telefone" no Contrato (CCB) é de EXTREMA IMPORTÂNCIA. Ele geralmente aparece no quadro de dados do EMITENTE ou DEVEDOR (o Cliente).
+${isOmni ? '- DICA ESPECÍFICA (Contrato OMNI): O celular fica no bloco "DADOS DO EMITENTE", no campo "Celular" logo abaixo do e-mail.' : ''}
+- DESCARTE telefones de advogados, lojas ou da própria instituição financeira. Foque exclusivamente no telefone vinculado aos dados pessoais do cliente.
+- Extraia também o valor do veículo, valor financiado, número de parcelas, banco/instituição credora, etc., para compor o resumo.
 
 ATENÇÃO CRÍTICA — NÃO confunda os dados:
-- O AUTOR/REQUERENTE é o CLIENTE (a pessoa que entrou com a ação). Extraia nome e CPF do autor.
-- O RÉU/REQUERIDO é a parte CONTRÁRIA (defendant).
-- Os ADVOGADOS listados representam uma das partes. Identifique para qual parte cada advogado atua (autor ou réu).
-- O advogado do AUTOR é o advogado parceiro do escritório.
-- Se houver telefone ou e-mail do autor/cliente no texto, extraia.
+- O AUTOR/REQUERENTE (da petição) é o mesmo CLIENTE (do contrato).
+- O RÉU (da petição) é a INSTITUIÇÃO CREDORA (do contrato).
+- Extraia o NOME COMPLETO e CPF do cliente.
+- Diferencie o telefone encontrado no contrato do telefone encontrado na petição.
 
-DICAS DE LOCALIZAÇÃO NO PDF:
-- O CABEÇALHO geralmente contém o nome do ESCRITÓRIO DE ADVOCACIA e logo. Extraia o nome do escritório.
-- Os dados do ADVOGADO (nome, OAB) geralmente aparecem no cabeçalho, na assinatura final, ou após "por meio do seu advogado".
-- A DATA DO PROCESSO (distribuição/protocolo) geralmente fica no RODAPÉ da última página ou próximo à assinatura.
-- Procure padrões como "Data:", "Protocolo:", "Distribuído em:", ou datas no formato DD/MM/YYYY no final do documento.
-
-Responda APENAS com JSON válido (sem markdown, sem backticks):
+Responda APENAS com JSON válido:
 {
-  "client_name": "nome completo do autor/requerente",
-  "client_cpf": "CPF do autor se encontrado",
-  "defendant": "nome do réu/requerido",
-  "case_type": "tipo de ação (ex: Ação de Indenização, Ação Trabalhista)",
+  "client_name": "nome completo do autor",
+  "client_cpf": "CPF do autor",
+  "defendant": "nome do réu (geralmente o banco/financeira)",
+  "case_type": "tipo de ação (ex: Revisional de Veículo)",
   "court": "tribunal e vara",
-  "process_number": "número do processo se encontrado",
-  "distribution_date": "data de distribuição no formato YYYY-MM-DD se encontrada, senão vazio",
-  "case_value": "valor da causa em número decimal (ex: 15160.82). ATENÇÃO: O valor da causa aparece nas ÚLTIMAS PÁGINAS do documento, geralmente na penúltima ou última página, ANTES da assinatura. Procure frases como: 'Dá-se à causa o valor de R$', 'Atribui-se à causa o valor de R$', 'Valor da causa: R$', 'dá à causa o valor de R$'. O valor vem escrito no corpo do texto (ex: 'Dá-se à causa o valor de R$ 15.160,82'). Converta para decimal com ponto (15160.82). Se não encontrar, deixe vazio.",
+  "process_number": "número do processo",
+  "distribution_date": "YYYY-MM-DD",
+  "case_value": 12345.67,
   "lawyers": [
-    {"name": "nome do advogado", "oab": "número OAB com estado (ex: OAB/RS 12345)", "role": "advogado do autor | advogado do réu"}
+    {"name": "...", "oab": "...", "role": "advogado do autor"}
   ],
-  "partner_law_firm": "nome do escritório de advocacia do autor (geralmente no cabeçalho)",
-  "phone_found": "telefone encontrado no texto do autor/cliente, se houver (apenas dígitos)",
-  "summary": "resumo em 2-3 frases em linguagem simples para leigos",
-  "valores_citados": ["valores monetários mencionados"],
-  "alertas_golpe": ["elementos que podem parecer suspeitos ao cliente ser contactado"],
-  "perguntas_provaveis": ["3-5 perguntas prováveis do cliente"]
+  "partner_law_firm": "escritório de advocacia",
+  "phone_found": "telefone encontrado na PETIÇÃO (apenas dígitos)",
+  "phone_contract": "telefone encontrado no CONTRATO/CCB (apenas dígitos) - ESTE É O MAIS IMPORTANTE",
+  "summary": "resumo detalhado incluindo detalhes do financiamento se encontrados no contrato",
+  "valores_citados": [],
+  "alertas_golpe": [],
+  "perguntas_provaveis": []
 }`;
 
-    // Truncate text to avoid token limits
-    const truncatedText = extractedText.slice(0, 15000);
-    console.log("Sending text to AI, length:", truncatedText.length);
+    // Truncate texts to avoid token limits
+    const pText = (petitionText || "").slice(0, 10000);
+    const cText = (contractText || "").slice(0, 5000);
+    console.log("Sending text to AI, petition length:", pText.length, "contract length:", cText.length);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -70,10 +77,10 @@ Responda APENAS com JSON válido (sem markdown, sem backticks):
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "gemini-1.5-flash",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Telefone fornecido pelo operador: ${phoneProvided || "não informado"}\n\nTexto da petição:\n\n${truncatedText}` },
+          { role: "user", content: `Telefone fornecido pelo operador: ${phoneProvided || "não informado"}\n\nTEXTO DA PETIÇÃO:\n${pText || "Não fornecido"}\n\nTEXTO DO CONTRATO/CCB:\n${cText || "Não fornecido"}` },
         ],
         temperature: 0.1,
       }),
@@ -82,17 +89,13 @@ Responda APENAS com JSON válido (sem markdown, sem backticks):
     if (!response.ok) {
       const errText = await response.text();
       console.error("AI gateway error:", response.status, errText);
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em instantes." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Créditos de IA insuficientes." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw new Error("Erro no gateway de IA");
+      return new Response(JSON.stringify({
+        error: `Erro no gateway de IA: ${response.status}`,
+        details: errText
+      }), {
+        status: response.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const aiResult = await response.json();
