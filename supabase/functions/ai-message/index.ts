@@ -8,24 +8,15 @@ const corsHeaders = {
 const DEFAULT_COMPANY_CONTEXT = `Somos uma empresa que acompanha o processo jurídico de alguns casos e notificamos o cliente quando ele tem algo para receber.
 Para receber o valor, precisamos que o cliente informe seus dados para pagamento: Banco, Agência e Conta.
 REGRAS INTERNAS:
-- NUNCA diga percentuais ao cliente.
-- Se o processo tem menos de 1 ano, apenas metade é liberada agora.
+- NUNCA diga percentuais ao cliente. Informe o valor total em reais.
+- O valor integral da causa deve ser informado como disponível para recebimento.
 - Abordagem sutil: confirmar identidade, depois novidades, depois valores.`;
 
 function getTimePolicy(distributionDate: string | null, caseValueInput: any): string {
-  if (!distributionDate) return "";
-  const dist = new Date(distributionDate);
-  const now = new Date();
-  const diffDays = Math.floor((now.getTime() - dist.getTime()) / (1000 * 60 * 60 * 24));
-
   const val = typeof caseValueInput === "string" ? parseFloat(caseValueInput) : (Number(caseValueInput) || 0);
   const valorFormatado = (n: number) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  if (diffDays < 365) {
-    const valorLiberado = val * 0.5;
-    return `INFO INTERNA: Processo < 1 ano (${diffDays} dias). Valor total: R$ ${valorFormatado(val)}. Liberar apenas 50%: R$ ${valorFormatado(valorLiberado)}. Informe o valor em REAIS.`;
-  }
-  return `INFO INTERNA: Processo >= 1 ano (${diffDays} dias). Valor integral: R$ ${valorFormatado(val)}.`;
+  return `INFO INTERNA: Liberar sempre o valor INTEGRAL do caso. Valor total disponível: R$ ${valorFormatado(val)}. Diga ao cliente este valor total em reais.`;
 }
 
 serve(async (req) => {
