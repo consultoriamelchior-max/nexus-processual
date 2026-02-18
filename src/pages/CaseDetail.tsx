@@ -12,6 +12,7 @@ import { DocumentsTab } from "@/components/DocumentsTab";
 import { ConversationsTab } from "@/components/ConversationsTab";
 import { MessageGeneratorTab } from "@/components/MessageGeneratorTab";
 import { CaseExportModal } from "@/components/CaseExportModal";
+import { formatPhone } from "@/lib/utils";
 
 export default function CaseDetail() {
   const { id } = useParams<{ id: string }>();
@@ -91,7 +92,14 @@ export default function CaseDetail() {
           <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
             <div>
               <h1 className="text-xl font-bold">{caseData.case_title}</h1>
-              {client && <p className="text-sm text-muted-foreground mt-1">Cliente: {client.full_name} — {client.phone}</p>}
+              {client && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Cliente: {client.full_name}
+                  {client.phone_contract && <span className="ml-2">— Contrato: {formatPhone(client.phone_contract)}</span>}
+                  {client.phone && <span className="ml-2">— Consulta: {formatPhone(client.phone)}</span>}
+                  {!client.phone && !client.phone_contract && <span className="ml-2 text-destructive font-medium">— Sem telefone</span>}
+                </p>
+              )}
               {caseData.process_number && (
                 <p className="text-xs text-muted-foreground font-mono mt-1">Processo: {caseData.process_number}</p>
               )}

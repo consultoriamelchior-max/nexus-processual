@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Download, Copy, Check, FileDown } from "lucide-react";
 import { toast } from "sonner";
 import type { Case } from "@/lib/types";
+import { formatPhone, formatCPF } from "@/lib/utils";
 
 interface Props {
   caseData: Case;
@@ -43,8 +44,9 @@ function buildExportText(caseData: Case): string {
     lines.push("👤 DADOS DO CLIENTE");
     lines.push("───────────────────────────────────────");
     lines.push(`Nome: ${toTitleCase(client.full_name)}`);
-    lines.push(`Telefone: ${client.phone}`);
-    if (client.cpf_or_identifier) lines.push(`CPF: ${client.cpf_or_identifier}`);
+    if (client.phone_contract) lines.push(`Tel. Contrato: ${formatPhone(client.phone_contract)}`);
+    if (client.phone) lines.push(`Tel. Consulta: ${formatPhone(client.phone)}`);
+    if (client.cpf_or_identifier) lines.push(`CPF: ${formatCPF(client.cpf_or_identifier)}`);
   }
 
   return lines.join("\n");

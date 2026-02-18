@@ -9,6 +9,7 @@ import { Download, FileText, FileDown, Stamp } from "lucide-react";
 import { toast } from "sonner";
 import type { Case, Client } from "@/lib/types";
 import jsPDF from "jspdf";
+import { formatPhone, formatCPF } from "@/lib/utils";
 
 interface Props {
   caseData: Case;
@@ -49,6 +50,7 @@ interface ExportContent {
   author: string;
   cpf: string;
   phones: string;
+  phoneContract: string;
   birthDate: string;
   income: string;
   profession: string;
@@ -62,16 +64,6 @@ interface ExportContent {
   initialMessage: string;
 }
 
-function formatCpfOrCnpj(value: string) {
-  const digits = value.replace(/\D/g, "");
-  if (digits.length === 11) {
-    return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-  }
-  if (digits.length === 14) {
-    return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
-  }
-  return value;
-}
 
 function buildExportContent(caseData: Case): ExportContent {
   const client = (caseData as any).clients as Client | undefined;
@@ -90,8 +82,9 @@ function buildExportContent(caseData: Case): ExportContent {
   return {
     title: caseData.case_title,
     author: client ? toTitleCase(client.full_name) : "Não informado",
-    cpf: client?.cpf_or_identifier ? formatCpfOrCnpj(client.cpf_or_identifier) : "Não informado",
-    phones: client?.phone || "Não informado",
+    cpf: client?.cpf_or_identifier ? formatCPF(client.cpf_or_identifier) : "Não informado",
+    phones: client?.phone ? formatPhone(client.phone) : "Não informado",
+    phoneContract: client?.phone_contract ? formatPhone(client.phone_contract) : "Não informado",
     birthDate: client?.birth_date || "Não informado",
     income: client?.income || "Não informado",
     profession: profession || "Não informado",
@@ -235,7 +228,8 @@ export function exportAsPdf(caseData: Case) {
   doc.text(c.author, margin + 6, y + 3);
   y += 16;
   addField("CPF:", c.cpf);
-  addField("Telefones:", c.phones);
+  if (c.phoneContract !== "Não informado") addField("Tel. Contrato:", c.phoneContract);
+  if (c.phones !== "Não informado") addField("Tel. Consulta:", c.phones);
   addField("Nascimento:", c.birthDate);
   addField("Renda:", c.income);
   addField("Profissão:", c.profession);
@@ -339,7 +333,7 @@ export async function exportAsOficio(caseData: Case) {
 
   // Dados dinâmicos
   const clientName = client?.full_name ? client.full_name.toUpperCase() : "NÃO INFORMADO";
-  const clientCpf = client?.cpf_or_identifier ? formatCpfOrCnpj(client.cpf_or_identifier) : "NÃO INFORMADO";
+  const clientCpf = client?.cpf_or_identifier ? formatCPF(client.cpf_or_identifier) : "NÃO INFORMADO";
   const processNumber = caseData.process_number || "NÃO INFORMADO";
   const defendant = caseData.defendant ? caseData.defendant.toUpperCase() : "NÃO INFORMADO";
   const caseValue = caseData.case_value ? Number(caseData.case_value) : 0;
@@ -547,7 +541,8 @@ export function exportAsTxt(caseData: Case) {
     line,
     `  Nome:        ${c.author}`,
     `  CPF:         ${c.cpf}`,
-    `  Telefones:   ${c.phones}`,
+    `  Tel. Contrato: ${c.phoneContract}`,
+    `  Tel. Consulta: ${c.phones}`,
     `  Nascimento:  ${c.birthDate}`,
     `  Renda:       ${c.income}`,
     `  Profissão:   ${c.profession}`,
