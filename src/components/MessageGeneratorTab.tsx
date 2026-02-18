@@ -61,6 +61,13 @@ export function MessageGeneratorTab({ caseData, documents, aiOutputs, onRefresh 
         },
       });
       if (error) throw error;
+
+      if (data?.error) {
+        toast.error(`Erro na Geração: ${data.error}`);
+        setGenerating(false);
+        return;
+      }
+
       const msgs = Array.isArray(data?.messages) ? data.messages : [data];
       setResults(msgs);
 
