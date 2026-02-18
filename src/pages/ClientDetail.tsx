@@ -53,7 +53,8 @@ export default function ClientDetail() {
 
   const infoItems = [
     { icon: FileText, label: "CPF", value: client.cpf_or_identifier },
-    { icon: Phone, label: "Telefones", value: client.phone },
+    { icon: Phone, label: "Telefone Consulta", value: client.phone },
+    { icon: Phone, label: "Telefone do Contrato", value: client.phone_contract },
     { icon: Mail, label: "E-mail", value: client.email },
     { icon: Calendar, label: "Nascimento", value: client.birth_date },
     { icon: DollarSign, label: "Renda", value: client.income },

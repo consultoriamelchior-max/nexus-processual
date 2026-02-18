@@ -65,7 +65,7 @@ export default function Clients() {
   };
 
   const handleExportCpfsSemTelefone = () => {
-    const semTelefone = clients.filter((c) => !c.phone || c.phone.trim() === "");
+    const semTelefone = clients.filter((c) => (!c.phone || c.phone.trim() === "") && (!c.phone_contract || c.phone_contract.trim() === ""));
 
     if (semTelefone.length === 0) {
       toast.info("Todos os clientes possuem telefone cadastrado.");
@@ -194,7 +194,12 @@ export default function Clients() {
 
   const filtered = clients.filter((c) => {
     const q = search.toLowerCase();
-    return c.full_name.toLowerCase().includes(q) || c.cpf_or_identifier?.toLowerCase().includes(q) || c.phone.includes(q);
+    return (
+      c.full_name.toLowerCase().includes(q) ||
+      c.cpf_or_identifier?.toLowerCase().includes(q) ||
+      (c.phone && c.phone.includes(q)) ||
+      (c.phone_contract && c.phone_contract.includes(q))
+    );
   });
 
   return (
@@ -253,7 +258,10 @@ export default function Clients() {
                 <Link to={`/client/${c.id}`} className="flex-1 min-w-0 hover:opacity-80 transition-opacity cursor-pointer">
                   <p className="text-sm font-medium hover:text-primary transition-colors">{c.full_name}</p>
                   <div className="flex flex-wrap gap-3 mt-1">
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground"><Phone className="w-3 h-3" />{c.phone || "Sem telefone"}</span>
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Phone className="w-3 h-3" />
+                      {c.phone_contract || c.phone || "Sem telefone"}
+                    </span>
                     {c.email && <span className="flex items-center gap-1 text-xs text-muted-foreground"><Mail className="w-3 h-3" />{c.email}</span>}
                     {c.cpf_or_identifier && <span className="text-xs text-muted-foreground font-mono">CPF: {c.cpf_or_identifier}</span>}
                   </div>

@@ -78,11 +78,10 @@ function ClientPhoneEditor({ client, onRefresh }: { client: any; onRefresh: () =
             <Button size="sm" variant="ghost" onClick={() => setEditingField(null)} className="h-7 text-xs px-2">Cancelar</Button>
           </div>
         ) : (
-          <div className={`flex items-center gap-1.5 ${!client.phone?.trim() ? 'bg-destructive/10 rounded-md px-2 py-1' : ''}`}>
-            {!client.phone?.trim() && <AlertTriangle className="w-3 h-3 text-destructive" />}
+          <div className="flex items-center gap-1.5 px-2 py-1">
             <Phone className="w-3 h-3 text-muted-foreground" />
-            <span className={`text-xs ${!client.phone?.trim() ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
-              {client.phone || "Sem telefone"}
+            <span className={`text-xs ${!client.phone?.trim() ? 'text-muted-foreground/60 italic' : 'text-muted-foreground'}`}>
+              {client.phone || "Não informado"}
             </span>
             <button onClick={() => startEditing("phone", client.phone)} className="text-muted-foreground hover:text-foreground transition-colors">
               <Pencil className="w-3 h-3" />
@@ -103,9 +102,17 @@ function ClientPhoneEditor({ client, onRefresh }: { client: any; onRefresh: () =
             <Button size="sm" variant="ghost" onClick={() => setEditingField(null)} className="h-7 text-xs px-2">Cancelar</Button>
           </div>
         ) : (
-          <div className={`flex items-center gap-1.5 ${!client.phone_contract?.trim() ? 'bg-secondary/50 rounded-md px-2 py-1' : ''}`}>
-            <Phone className="w-3 h-3 text-primary" />
-            <span className={`text-xs ${!client.phone_contract?.trim() ? 'text-muted-foreground italic' : 'text-foreground font-semibold'}`}>
+          <div className={cn(
+            "flex items-center gap-1.5 px-2 py-1 rounded-md",
+            !client.phone_contract?.trim() && !client.phone?.trim() ? "bg-destructive/10 border border-destructive/20" : "bg-secondary/50"
+          )}>
+            {!client.phone_contract?.trim() && !client.phone?.trim() && <AlertTriangle className="w-3 h-3 text-destructive" />}
+            <Phone className={cn("w-3 h-3", client.phone_contract?.trim() ? "text-primary" : "text-muted-foreground")} />
+            <span className={cn(
+              "text-xs",
+              !client.phone_contract?.trim() && !client.phone?.trim() ? "text-destructive font-medium" :
+                !client.phone_contract?.trim() ? "text-muted-foreground italic" : "text-foreground font-semibold"
+            )}>
               {client.phone_contract || "Não extraído"}
             </span>
             <button onClick={() => startEditing("phone_contract", client.phone_contract)} className="text-muted-foreground hover:text-foreground transition-colors">
