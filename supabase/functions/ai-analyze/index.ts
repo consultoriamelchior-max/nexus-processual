@@ -27,7 +27,8 @@ serve(async (req) => {
 
 REGRAS GERAIS:
 - Extraia Nome, CPF, Réu, Processo e Valor.
-- Todo fone do cliente encontrado DEVE ir para "phone_contract".
+- Todo fone do cliente encontrado DEVE ir para "phone_contract". 
+- EM CONTRATOS CCB/OMNI: O telefone aparece frequentemente como "Celular:" logo abaixo do e-mail/CEP. Ex: "Celular: (53) 999493280". CAPTURE-O OBRIGATORIAMENTE.
 
 REGRAS DO RESUMO (EQUILÍBRIO):
 1. O campo "summary" deve ser um RESUMO EXECUTIVO de 2 a 3 frases concisas.
