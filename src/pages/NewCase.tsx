@@ -144,13 +144,10 @@ export default function NewCase() {
       if (ext.lawyers?.length > 0) {
         setPartnerLawyer(ext.lawyers.map((l) => `${l.name} (${l.oab})`).join(", "));
       }
-      // If phone was found in PDF and none was provided
-      if (ext.phone_found && !phone) {
-        setPhone(formatPhone(ext.phone_found));
-      }
-      // If phone was found in Contract
-      if (ext.phone_contract) {
-        setPhoneContract(formatPhone(ext.phone_contract));
+      // Map any found phone to phoneContract (never to consulta/phone)
+      const extractedPhone = ext.phone_contract || ext.phone_found;
+      if (extractedPhone) {
+        setPhoneContract(formatPhone(extractedPhone));
       }
 
       toast.success("Documentos processados! Confira os dados extraídos.");

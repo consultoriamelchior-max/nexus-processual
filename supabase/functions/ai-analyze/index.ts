@@ -24,40 +24,36 @@ serve(async (req) => {
     const isOmni = contractType === "omni";
 
     const systemPrompt = `Você é um assistente jurídico especializado em análise de documentos brasileiros de financiamento e petições iniciais.
-    
-Você receberá dois textos:
-1. TEXTO DA PETIÇÃO: Uma petição inicial de um processo judicial.
-2. TEXTO DO CONTRATO (CCB): Um contrato de financiamento (Cédula de Crédito Bancário - CCB).
 
-TAREFA: Extraia dados estruturados combinando as informações de ambos os documentos.
+TAREFA: Extraia dados estruturados combinando as informações da PETIÇÃO e do CONTRATO.
 
 REGRA DE TELEFONE (CRÍTICO):
-- O campo "phone_contract" DEVE conter o telefone principal do CLIENTE.
-- ONDE BUSCAR: Procure na QUALIFICAÇÃO DO AUTOR na petição (perto do nome/CPF) ou no bloco de DADOS DO EMITENTE no contrato.
-- PRIORIDADE MÁXIMA: Se encontrar um telefone na petição, coloque-o em "phone_contract". NÃO coloque em "phone_found".
-- CUIDADO: Ignore telefones de advogados (perto de OAB).
+- O campo "phone_contract" DEVE conter o telefone principal do CLIENTE (extraído da petição ou contrato).
+- IGNORE o campo "phone_found". Coloque tudo em "phone_contract".
+- CUIDADO: Descarte telefones de advogados (perto de OAB).
 
-RESUMO (CRÍTICO):
+RESUMO ULTRA-CONCISO (CRÍTICO):
 - O campo "summary" deve ser CURTO e DIRETO.
-- Máximo de 2 parágrafos pequenos.
-- Objetivo: Explicar o que o cliente quer (ex: revisional de juros) e qual o veículo/banco envolvido. Sem detalhes excessivos.
+- MÁXIMO 300 CARACTERES.
+- PROIBIDO: Listar números de contrato, CPFs, RGs ou detalhes técnicos exaustivos.
+- Objetivo: Apenas citar o que o cliente quer (ex: revisional) e contra qual banco.
+
+Exemplo de resumo: "O autor busca a revisão de juros abusivos de um contrato de financiamento de veículo com o Banco OMNI, alegando taxas acima da média de mercado."
 
 Responda APENAS com JSON válido:
 {
-  "client_name": "nome completo do autor",
-  "client_cpf": "CPF do autor",
-  "defendant": "nome do réu (geralmente o banco/financeira)",
-  "case_type": "tipo de ação (ex: Revisional de Veículo)",
-  "court": "tribunal e vara",
-  "process_number": "número do processo",
+  "client_name": "NOME",
+  "client_cpf": "CPF_DIGITOS",
+  "defendant": "REU",
+  "case_type": "TIPO_ACAO",
+  "court": "VARA/COMARCA",
+  "process_number": "PROCESSO",
   "distribution_date": "YYYY-MM-DD",
-  "case_value": 12345.67,
-  "lawyers": [
-    {"name": "...", "oab": "...", "role": "advogado do autor"}
-  ],
-  "partner_law_firm": "escritório de advocacia",
-  "phone_contract": "Telefone do Cliente (apenas dígitos) encontrado na petição ou contrato",
-  "summary": "Resumo curto e direto (máximo 2 parágrafos)."
+  "case_value": 0.00,
+  "lawyers": [{"name": "...", "oab": "...", "role": "..."}],
+  "partner_law_firm": "FIRM",
+  "phone_contract": "DIGITOS_FONE_CLIENTE",
+  "summary": "RESUMO_ULTRA_CURTO"
 }`;
 
     // Truncate texts to avoid token limits
