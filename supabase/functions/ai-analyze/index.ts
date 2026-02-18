@@ -24,24 +24,26 @@ serve(async (req) => {
     const isOmni = contractType === "omni";
 
     const systemPrompt = `Você é um assistente jurídico especializado em análise de documentos brasileiros de financiamento e petições iniciais.
-
+    
 Você receberá dois textos:
 1. TEXTO DA PETIÇÃO: Uma petição inicial de um processo judicial.
 2. TEXTO DO CONTRATO (CCB): Um contrato de financiamento (Cédula de Crédito Bancário - CCB).
 
 TAREFA: Extraia dados estruturados combinando as informações de ambos os documentos.
 
-DADOS DO CONTRATO (CCB):
-- O campo "Celular" ou "Telefone" no Contrato (CCB) é de EXTREMA IMPORTÂNCIA. Ele geralmente aparece no quadro de dados do EMITENTE ou DEVEDOR (o Cliente).
-${isOmni ? '- DICA ESPECÍFICA (Contrato OMNI): O celular fica no bloco "DADOS DO EMITENTE", no campo "Celular" logo abaixo do e-mail.' : ''}
-- DESCARTE telefones de advogados, lojas ou da própria instituição financeira. Foque exclusivamente no telefone vinculado aos dados pessoais do cliente.
-- Extraia também o valor do veículo, valor financiado, número de parcelas, banco/instituição credora, etc., para compor o resumo.
+DIRETRIZES DE EXTRAÇÃO DE TELEFONE (CRÍTICO):
+- O campo "phone_contract" é o seu objetivo principal. Ele deve conter o telefone de contato direto do CLIENTE.
+- ONDE BUSCAR:
+  1. NO CONTRATO (CCB): Procure no bloco de "Dados do Emitente/Devedor".
+  2. NA PETIÇÃO: Procure na seção de "QUALIFICAÇÃO DO AUTOR" (geralmente no início, onde consta o Nome, CPF e Endereço). Muitas vezes o telefone está logo após o endereço ou e-mail do autor.
+- CUIDADO COM ADVOGADOS: Verifique o contexto. Se o telefone estiver próximo de um número de OAB ou no rodapé junto aos dados do advogado, IGNORE-O. O telefone do cliente geralmente aparece junto aos dados pessoais dele (CPF, RG, Estado Civil).
+- PRIORIDADE: Se encontrar um telefone na qualificação do autor na petição, considere-o como o telefone de contato (phone_contract), mesmo que o documento de contrato não tenha sido enviado.
 
-ATENÇÃO CRÍTICA — NÃO confunda os dados:
+DADOS ADICIONAIS:
 - O AUTOR/REQUERENTE (da petição) é o mesmo CLIENTE (do contrato).
 - O RÉU (da petição) é a INSTITUIÇÃO CREDORA (do contrato).
-- Extraia o NOME COMPLETO e CPF do cliente.
-- Diferencie o telefone encontrado no contrato do telefone encontrado na petição.
+- Extraia sempre o NOME COMPLETO e CPF do cliente.
+- "phone_found" pode conter outros números secundários achados na petição, mas o principal deve ir para "phone_contract".
 
 Responda APENAS com JSON válido:
 {
@@ -57,8 +59,8 @@ Responda APENAS com JSON válido:
     {"name": "...", "oab": "...", "role": "advogado do autor"}
   ],
   "partner_law_firm": "escritório de advocacia",
-  "phone_found": "telefone encontrado na PETIÇÃO (apenas dígitos)",
-  "phone_contract": "telefone encontrado no CONTRATO/CCB (apenas dígitos) - ESTE É O MAIS IMPORTANTE",
+  "phone_found": "telefone secundário (apenas dígitos)",
+  "phone_contract": "Telefone do Cliente/Contrato (apenas dígitos) - extraído da qualificação ou do CCB",
   "summary": "resumo extremamente conciso em 2-3 frases em linguagem simples para leigos, focando apenas no objetivo da ação e no veículo/banco envolvido.",
   "valores_citados": [],
   "alertas_golpe": [],
@@ -77,12 +79,13 @@ Responda APENAS com JSON válido:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-2.0-flash",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Telefone fornecido pelo operador: ${phoneProvided || "não informado"}\n\nTEXTO DA PETIÇÃO:\n${pText || "Não fornecido"}\n\nTEXTO DO CONTRATO/CCB:\n${cText || "Não fornecido"}` },
         ],
         temperature: 0.1,
+        response_format: { type: "json_object" }
       }),
     });
 
