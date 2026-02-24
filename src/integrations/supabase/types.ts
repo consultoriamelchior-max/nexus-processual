@@ -68,9 +68,12 @@ export type Database = {
           company_context: string | null
           court: string | null
           created_at: string
+          custom_lawyer_name: string | null
+          custom_lawyer_oab: string | null
           defendant: string | null
           distribution_date: string | null
           id: string
+          lawyer_mode: string
           partner_law_firm_name: string | null
           partner_lawyer_name: string | null
           process_number: string | null
@@ -86,9 +89,12 @@ export type Database = {
           company_context?: string | null
           court?: string | null
           created_at?: string
+          custom_lawyer_name?: string | null
+          custom_lawyer_oab?: string | null
           defendant?: string | null
           distribution_date?: string | null
           id?: string
+          lawyer_mode?: string
           partner_law_firm_name?: string | null
           partner_lawyer_name?: string | null
           process_number?: string | null
@@ -104,9 +110,12 @@ export type Database = {
           company_context?: string | null
           court?: string | null
           created_at?: string
+          custom_lawyer_name?: string | null
+          custom_lawyer_oab?: string | null
           defendant?: string | null
           distribution_date?: string | null
           id?: string
+          lawyer_mode?: string
           partner_law_firm_name?: string | null
           partner_lawyer_name?: string | null
           process_number?: string | null
