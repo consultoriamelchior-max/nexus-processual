@@ -33,7 +33,7 @@ export default function ClientDetail() {
       const clientData = clientRes.data as Client | null;
       setClient(clientData);
       setTempCpf(clientData?.cpf_or_identifier || "");
-      setCases((casesRes.data as Case[]) ?? []);
+      setCases((casesRes.data as unknown as Case[]) ?? []);
       setLoading(false);
     });
   }, [user, id]);
